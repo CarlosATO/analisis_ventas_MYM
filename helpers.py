@@ -82,7 +82,7 @@ def export_to_excel(df: pd.DataFrame, sheet_name: str = "Datos") -> bytes:
     - Encabezados en negrita con fondo azul oscuro
     - Autofiltro activado
     - Primera fila congelada
-    - Ancho de columna automático (máx 50 chars)
+    - Ancho de columna automático (máx 40 chars)
     """
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
@@ -100,11 +100,14 @@ def export_to_excel(df: pd.DataFrame, sheet_name: str = "Datos") -> bytes:
         })
         for col_num, col_name in enumerate(df.columns):
             ws.write(0, col_num, str(col_name), header_fmt)
-            # Ancho automático
-            col_series = df.iloc[:, col_num].astype(str)
-            max_data_len = col_series.map(len).max() if len(df) > 0 else 10
-            col_width = max(len(str(col_name)), max_data_len)
-            ws.set_column(col_num, col_num, min(col_width + 2, 50))
+            try:
+                col_series = df.iloc[:, col_num].fillna("").astype(str)
+                max_data_len = col_series.map(len).max() if len(df) > 0 else 10
+                header_len = len(str(col_name))
+                col_width = min(max(header_len, max_data_len) + 2, 40)
+                ws.set_column(col_num, col_num, col_width)
+            except Exception:
+                ws.set_column(col_num, col_num, 15)
 
         ws.autofilter(0, 0, 0, len(df.columns) - 1)
         ws.freeze_panes(1, 0)

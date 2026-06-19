@@ -96,12 +96,12 @@ def render_resumen(
             line=dict(color="#F59E0B", width=2),
             marker=dict(size=5),
         ))
+        fig_week.update_layout(**plotly_theme(is_dark))
         fig_week.update_layout(
             yaxis=dict(title="Venta Total ($)"),
             yaxis2=dict(title="Unidades", overlaying="y", side="right"),
             xaxis=dict(title="Semana"),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            **plotly_theme(is_dark),
         )
         st.plotly_chart(fig_week, width="stretch")
 
@@ -170,10 +170,10 @@ def render_resumen(
             textposition="top center",
             textfont=dict(size=10, color=TEXT_MAIN),
         ))
+        fig_month.update_layout(**plotly_theme(is_dark))
         fig_month.update_layout(
             xaxis=dict(title="Mes", tickangle=-30),
             yaxis=dict(title="Venta Total ($)"),
-            **plotly_theme(is_dark),
         )
         st.plotly_chart(fig_month, width="stretch")
 
@@ -202,10 +202,9 @@ def render_resumen(
             textposition="outside",
             textfont=dict(color=TEXT_MAIN),
         ))
-        fig_alert.update_layout(
-            xaxis_title="Alerta", yaxis_title="SKUs",
-            **plotly_theme(is_dark),
-        )
+        fig_alert.update_layout(**plotly_theme(is_dark))
+        fig_alert.update_xaxes(title_text="Alerta")
+        fig_alert.update_yaxes(title_text="SKUs")
         st.plotly_chart(fig_alert, width="stretch")
 
         alerta_sel = st.selectbox(
@@ -242,10 +241,9 @@ def render_resumen(
             textposition="inside",
             textfont=dict(size=10, color="#FFFFFF"),
         ))
-        fig_top.update_layout(
-            xaxis_title="Venta ($)", yaxis_title="",
-            **plotly_theme(is_dark),
-        )
+        fig_top.update_layout(**plotly_theme(is_dark))
+        fig_top.update_xaxes(title_text="Venta ($)")
+        fig_top.update_yaxes(title_text="")
         st.plotly_chart(fig_top, width="stretch")
 
         t15 = top15.reset_index(drop=True)

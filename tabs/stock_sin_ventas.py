@@ -78,11 +78,9 @@ def render_stock_sin_ventas(
         textposition="inside",
         textfont=dict(size=9, color="#FFFFFF"),
     ))
-    fig.update_layout(
-        xaxis_title="Valor del stock inmovilizado ($)",
-        yaxis_title="",
-        **plotly_theme(is_dark),
-    )
+    fig.update_layout(**plotly_theme(is_dark))
+    fig.update_xaxes(title_text="Valor del stock inmovilizado ($)")
+    fig.update_yaxes(title_text="")
     st.plotly_chart(fig, width="stretch")
 
     # Tabla completa

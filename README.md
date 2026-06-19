@@ -51,7 +51,7 @@ Permite arrancar el dashboard sin necesidad de abrir una consola o terminal manu
 
 Si deseas ejecutarlo desde consola/terminal:
 ```bash
-python launch_app.py
+source .venv/bin/activate && python launch_app.py
 ```
 
 ### 2. Modo Desarrollo

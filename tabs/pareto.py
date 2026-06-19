@@ -88,13 +88,13 @@ def render_pareto(
         line=dict(color="#F59E0B", width=2),
         hovertemplate="%{x}<br>Acumulado: %{y:.1f}%<extra></extra>",
     ))
+    fig.update_layout(**plotly_theme(is_dark))
     fig.update_layout(
         yaxis=dict(title="Venta ($)"),
         yaxis2=dict(title="% Acumulado", overlaying="y", side="right",
                     tickformat=".0f", ticksuffix="%"),
         xaxis=dict(title="SKU"),
         legend=dict(orientation="h"),
-        **plotly_theme(is_dark),
     )
     st.plotly_chart(fig, width="stretch")
 

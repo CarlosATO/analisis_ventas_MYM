@@ -76,11 +76,9 @@ def render_quiebres(
             textposition="inside",
             textfont=dict(size=10, color="#FFFFFF"),
         ))
-        fig_cob.update_layout(
-            xaxis_title="Días de cobertura estimada",
-            yaxis_title="",
-            **plotly_theme(is_dark),
-        )
+        fig_cob.update_layout(**plotly_theme(is_dark))
+        fig_cob.update_xaxes(title_text="Días de cobertura estimada")
+        fig_cob.update_yaxes(title_text="")
         st.plotly_chart(fig_cob, width="stretch")
 
     # Vista scatter en expander

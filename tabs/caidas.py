@@ -91,7 +91,9 @@ def render_caidas(
                 textposition="inside",
                 textfont=dict(size=9, color="#FFFFFF"),
             ))
-            fig_fall.update_layout(xaxis_title="Diferencia ($)", yaxis_title="", **plotly_theme(is_dark))
+            fig_fall.update_layout(**plotly_theme(is_dark))
+            fig_fall.update_xaxes(title_text="Diferencia ($)")
+            fig_fall.update_yaxes(title_text="")
             st.plotly_chart(fig_fall, width="stretch")
 
             tbl = fall_ca.head(50).copy()
@@ -127,7 +129,9 @@ def render_caidas(
                 textposition="inside",
                 textfont=dict(size=9, color="#FFFFFF"),
             ))
-            fig_grow.update_layout(xaxis_title="Diferencia ($)", yaxis_title="", **plotly_theme(is_dark))
+            fig_grow.update_layout(**plotly_theme(is_dark))
+            fig_grow.update_xaxes(title_text="Diferencia ($)")
+            fig_grow.update_yaxes(title_text="")
             st.plotly_chart(fig_grow, width="stretch")
 
             tbl = growth_ca.head(50).copy()

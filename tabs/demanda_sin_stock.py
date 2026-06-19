@@ -65,11 +65,9 @@ def render_demanda_sin_stock(
         textposition="inside",
         textfont=dict(size=9, color="#1E293B"),
     ))
-    fig_ns.update_layout(
-        xaxis_title="Venta potencial no capturada ($)",
-        yaxis_title="",
-        **plotly_theme(is_dark),
-    )
+    fig_ns.update_layout(**plotly_theme(is_dark))
+    fig_ns.update_xaxes(title_text="Venta potencial no capturada ($)")
+    fig_ns.update_yaxes(title_text="")
     st.plotly_chart(fig_ns, width="stretch")
 
     # Selectbox historial de producto
@@ -94,11 +92,10 @@ def render_demanda_sin_stock(
                 textposition="outside",
                 textfont=dict(size=9, color=TEXT_MAIN),
             ))
-            fig_hist.update_layout(
-                title=f"Historial semanal: {prod_sel}",
-                xaxis_title="Semana", yaxis_title="Venta ($)",
-                **plotly_theme(is_dark),
-            )
+            fig_hist.update_layout(**plotly_theme(is_dark))
+            fig_hist.update_layout(title=f"Historial semanal: {prod_sel}")
+            fig_hist.update_xaxes(title_text="Semana")
+            fig_hist.update_yaxes(title_text="Venta ($)")
             st.plotly_chart(fig_hist, width="stretch")
         else:
             st.info("Sin historial de ventas para este producto.")
