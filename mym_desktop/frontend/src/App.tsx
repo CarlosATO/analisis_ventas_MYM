@@ -183,9 +183,9 @@ export default function App() {
   // Reposición Inteligente
   const [reposicion, setReposicion] = useState<ReposicionResponse | null>(null)
   const [repoFiltros, setRepoFiltros] = useState<ReposicionFiltrosResponse | null>(null)
-  const [rProveedor, setRProveedor] = useState("")
-  const [rMarca, setRMarca] = useState("")
-  const [rCategoria, setRCategoria] = useState("")
+  const [rProveedor] = useState("")
+  const [rMarca] = useState("")
+  const [rCategoria] = useState("")
   const [rSemanas, setRSemanas] = useState(4)
   const [rCobertura, setRCobertura] = useState(2)
   const [rStockMin, setRStockMin] = useState(0)
@@ -915,26 +915,17 @@ export default function App() {
             {!reposicion && (
               <Card>
                 <div className="flex flex-wrap items-end gap-4">
-                  <div className="min-w-[170px]">
-                    <FilterSelect label="Proveedor" value={rProveedor} onChange={v => { setRProveedor(v); markRepoFiltersChanged() }}
-                      options={[{ value: "", label: "Todos" }, ...(repoFiltros?.proveedores ?? []).map(v => ({ value: v, label: v }))]} /></div>
-                  <div className="min-w-[150px]">
-                    <FilterSelect label="Marca" value={rMarca} onChange={v => { setRMarca(v); markRepoFiltersChanged() }}
-                      options={[{ value: "", label: "Todas" }, ...(repoFiltros?.marcas ?? []).map(v => ({ value: v, label: v }))]} /></div>
-                  <div className="min-w-[150px]">
-                    <FilterSelect label="Categoría" value={rCategoria} onChange={v => { setRCategoria(v); markRepoFiltersChanged() }}
-                      options={[{ value: "", label: "Todas" }, ...(repoFiltros?.categorias ?? []).map(v => ({ value: v, label: v }))]} /></div>
                   <FilterSelect label="Semanas a analizar" value={String(rSemanas)} onChange={v => { setRSemanas(Number(v)); markRepoFiltersChanged() }}
                     options={[2, 4, 8, 12, 16].map(v => ({ value: String(v), label: `${v} semanas` }))} />
                   <FilterSelect label="Cobertura objetivo" title="La cobertura objetivo indica cuántas semanas se desea cubrir con inventario. Ejemplo: si el producto vende 10 unidades por semana y la cobertura objetivo es 8 semanas, el stock objetivo será 80 unidades." value={String(rCobertura)} onChange={v => { setRCobertura(Number(v)); markRepoFiltersChanged() }}
                     options={[2, 4, 6, 8, 12].map(v => ({ value: String(v), label: `${v} semanas` }))} />
+                  <FilterCheckbox label="Incluir sin stock/venta" checked={rIncluirSinStockSinVenta} onChange={v => { setRIncluirSinStockSinVenta(v); markRepoFiltersChanged() }} />
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-medium" style={{ color: "var(--muted)" }} title="Cantidad mínima de stock que debe tener un producto para ser considerado en el sugerido. Si está en 0 no aplica filtro.">Stock mínimo</label>
                     <input type="number" min={0} value={rStockMin} onChange={e => { setRStockMin(Number(e.target.value) || 0); markRepoFiltersChanged() }}
                       className="text-sm rounded-md border px-2 py-1.5 w-20" style={{ borderColor: "var(--border)", backgroundColor: "var(--background)", color: "var(--foreground)" }} />
                   </div>
                   <FilterCheckbox label="Excluir comerciales" checked={rExclude} onChange={v => { setRExclude(v); setRepoFiltros(null); markRepoFiltersChanged() }} />
-                  <FilterCheckbox label="Incluir sin stock/venta" checked={rIncluirSinStockSinVenta} onChange={v => { setRIncluirSinStockSinVenta(v); markRepoFiltersChanged() }} />
                   <Button size="sm" onClick={async () => { await loadReposicionFiltros(); await loadReposicion() }}>Obtener sugerido</Button>
                 </div>
               </Card>
@@ -964,6 +955,7 @@ export default function App() {
                     options={[2, 4, 8, 12, 16].map(v => ({ value: String(v), label: `${v} semanas` }))} />
                   <FilterSelect label="Cobertura objetivo" title="La cobertura objetivo indica cuántas semanas se desea cubrir con inventario." value={String(rCobertura)} onChange={v => { setRCobertura(Number(v)); setRepoAvisoFiltros("Parámetros cambiados. Presione Actualizar sugerido para recalcular.") }}
                     options={[2, 4, 6, 8, 12].map(v => ({ value: String(v), label: `${v} semanas` }))} />
+                  <FilterCheckbox label="Incluir sin stock/venta" checked={rIncluirSinStockSinVenta} onChange={v => { setRIncluirSinStockSinVenta(v); setRepoAvisoFiltros("Parámetros cambiados. Presione Actualizar sugerido para recalcular.") }} />
                   <Button size="sm" onClick={async () => { await loadReposicion() }}>Actualizar sugerido</Button>
                 </div>
 
