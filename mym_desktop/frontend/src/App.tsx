@@ -192,6 +192,9 @@ export default function App() {
   const [rExclude, setRExclude] = useState(true)
   const [rIncluirSinStockSinVenta, setRIncluirSinStockSinVenta] = useState(false)
   const [rBusqueda, setRBusqueda] = useState("")
+  const [repoProveedorBusqueda, setRepoProveedorBusqueda] = useState("")
+  const [repoProveedorFiltro, setRepoProveedorFiltro] = useState("")
+  const [repoProveedorOpen, setRepoProveedorOpen] = useState(false)
   const [repoConfirmaciones, setRepoConfirmaciones] = useState<Record<string, { cantidad: number; confirmado: boolean }>>({})
   const [repoAvisoFiltros, setRepoAvisoFiltros] = useState("")
   const [repoFilaActiva, setRepoFilaActiva] = useState("")
@@ -252,6 +255,8 @@ export default function App() {
 
   const markRepoFiltersChanged = () => {
     setReposicion(null)
+    setRepoProveedorBusqueda("")
+    setRepoProveedorFiltro("")
     setRepoConfirmaciones({})
     setRepoAvisoFiltros("Los filtros cambiaron. Revise nuevamente el sugerido antes de confirmar.")
   }
@@ -297,7 +302,12 @@ export default function App() {
   }
 
   const repoBusquedaNorm = rBusqueda.trim().toLowerCase()
+  const repoProveedorNorm = repoProveedorFiltro.trim().toLowerCase()
+  const repoProveedoresDisponibles = Array.from(new Set((reposicion?.productos ?? []).map(p => String(p.proveedor ?? "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "es"))
+  const repoProveedorQuery = repoProveedorBusqueda.trim().toLowerCase()
+  const repoProveedorSugerencias = repoProveedoresDisponibles.filter(p => !repoProveedorQuery || p.toLowerCase().includes(repoProveedorQuery)).slice(0, 8)
   const repoProductosFiltrados = (reposicion?.productos ?? []).filter(p => {
+    if (repoProveedorNorm && String(p.proveedor ?? "").trim().toLowerCase() !== repoProveedorNorm) return false
     if (!repoBusquedaNorm) return true
     return [p.sku, p.producto, p.proveedor, p.marca, p.categoria].some(v => String(v ?? "").toLowerCase().includes(repoBusquedaNorm))
   })
@@ -960,7 +970,7 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Mini barra de resumen sugerido + confirmado */}
+                {/* Mini barra de resumen sugerido */}
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl border px-3 py-2 text-xs" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
                   <span style={{ color: "var(--muted)" }}>Sugerido:</span>
                   <span>Evaluados <strong style={{ color: "var(--foreground)" }}>{reposicion.resumen.sku_evaluados.toLocaleString("es-CL")}</strong></span>
@@ -969,22 +979,41 @@ export default function App() {
                   <span style={{ color: "var(--muted)" }}>Completar <strong>{reposicion.resumen.sku_completar_objetivo.toLocaleString("es-CL")}</strong></span>
                   <span style={{ color: "var(--muted)" }}>Unidades <strong>{reposicion.resumen.unidades_sugeridas.toLocaleString("es-CL")}</strong></span>
                   <span style={{ color: "var(--muted)" }}>Monto <strong>{fmtMoney(reposicion.resumen.monto_estimado_compra)}</strong></span>
-                  <span className="ml-2 w-px h-4" style={{ backgroundColor: "var(--border)" }}></span>
-                  <span style={{ color: "var(--muted)" }}>Confirmado:</span>
-                  <span>SKU <strong style={{ color: "var(--foreground)" }}>{repoResumenConfirmado.skus.toLocaleString("es-CL")}</strong></span>
-                  <span>Unidades <strong style={{ color: "var(--foreground)" }}>{repoResumenConfirmado.unidades.toLocaleString("es-CL")}</strong></span>
-                  <span>Monto <strong style={{ color: "var(--foreground)" }}>{fmtMoney(repoResumenConfirmado.monto)}</strong></span>
                 </div>
 
                 <Card>
                   <CardTitle className="text-sm font-bold">Detalle por SKU</CardTitle>
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(260px,1fr)_minmax(280px,1fr)_auto] xl:items-end">
                     <div className="w-full sm:max-w-md">
                       <label className="text-xs font-medium" style={{ color: "var(--muted)" }}>Buscar producto o código</label>
                       <input value={rBusqueda} onChange={e => setRBusqueda(e.target.value)} placeholder="ALASKA, 756625, LEONARDO, CHURU..." className="mt-1 w-full rounded-md border px-3 py-2 text-sm" style={{ borderColor: "var(--border)", backgroundColor: "var(--background)", color: "var(--foreground)" }} />
                     </div>
-                    <p className="text-sm" style={{ color: "var(--muted)" }}>Mostrando {repoProductosFiltrados.length.toLocaleString("es-CL")} de {reposicion.productos.length.toLocaleString("es-CL")} productos</p>
+                    <div className="relative w-full sm:max-w-md">
+                      <label className="text-xs font-medium" style={{ color: "var(--muted)" }}>Buscar proveedor</label>
+                      <div className="mt-1 flex rounded-md border" style={{ borderColor: "var(--border)", backgroundColor: "var(--background)" }}>
+                        <input value={repoProveedorBusqueda} onFocus={() => setRepoProveedorOpen(true)} onBlur={() => setTimeout(() => setRepoProveedorOpen(false), 120)} onChange={e => { setRepoProveedorBusqueda(e.target.value); setRepoProveedorFiltro(""); setRepoProveedorOpen(true) }} placeholder="Escriba para filtrar proveedores..." className="w-full rounded-md bg-transparent px-3 py-2 text-sm outline-none" style={{ color: "var(--foreground)" }} />
+                        {(repoProveedorBusqueda || repoProveedorFiltro) && <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => { setRepoProveedorBusqueda(""); setRepoProveedorFiltro(""); setRepoProveedorOpen(false) }} className="px-3 text-sm font-bold hover:opacity-70" style={{ color: "var(--muted)" }}>×</button>}
+                      </div>
+                      {repoProveedorOpen && repoProveedorSugerencias.length > 0 && (
+                        <div className="absolute z-40 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border shadow-xl" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                          {repoProveedorSugerencias.map(p => (
+                            <button key={p} type="button" onMouseDown={e => e.preventDefault()} onClick={() => { setRepoProveedorBusqueda(p); setRepoProveedorFiltro(p); setRepoProveedorOpen(false) }} className="block w-full px-3 py-2 text-left text-sm hover:bg-sky-500/10" style={{ color: "var(--foreground)" }}>
+                              {p}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-xl border px-4 py-2 text-xs shadow-sm" style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-soft)", color: "var(--foreground)" }}>
+                      <div className="mb-1 font-semibold" style={{ color: "var(--muted)" }}>Confirmado:</div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 whitespace-nowrap">
+                        <span>SKU <strong>{repoResumenConfirmado.skus.toLocaleString("es-CL")}</strong></span>
+                        <span>Unidades <strong>{repoResumenConfirmado.unidades.toLocaleString("es-CL")}</strong></span>
+                        <span>Monto <strong>{fmtMoney(repoResumenConfirmado.monto)}</strong></span>
+                      </div>
+                    </div>
                   </div>
+                  <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>Mostrando {repoProductosFiltrados.length.toLocaleString("es-CL")} de {reposicion.productos.length.toLocaleString("es-CL")} productos{repoProveedorFiltro ? ` · Proveedor: ${repoProveedorFiltro}` : ""}</p>
                   <div className="repo-table-wrap">
                     <Table className="repo-table border-0 rounded-none">
                       <THead>
