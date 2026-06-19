@@ -4,6 +4,7 @@ Reutiliza data_loader.py, analytics.py y exports.py del proyecto Streamlit.
 """
 
 import io
+import os
 import uuid
 import numpy as np
 from pathlib import Path
@@ -1249,3 +1250,9 @@ def export_reposicion_plan_pdf(analysis_id: str, payload: dict = Body(...)):
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=sugerido_compras_mym.pdf"},
     )
+
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
