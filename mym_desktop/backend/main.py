@@ -15,8 +15,9 @@ from fpdf import FPDF
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Body
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 import pandas as pd
 
@@ -1250,6 +1251,20 @@ def export_reposicion_plan_pdf(analysis_id: str, payload: dict = Body(...)):
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=sugerido_compras_mym.pdf"},
     )
+
+
+# ── Frontend estático (monolito) ────────────────────
+frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/dist"))
+
+if os.path.exists(frontend_dist):
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
+
+    @app.get("/{catchall:path}")
+    def serve_react_app(catchall: str):
+        file_path = os.path.join(frontend_dist, catchall)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
 
 
 if __name__ == "__main__":

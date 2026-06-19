@@ -5,7 +5,7 @@ import type {
   ReposicionFiltrosResponse, ReposicionResponse, ReposicionProducto,
 } from "@/types"
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:8000"
+const API = import.meta.env.VITE_API_URL || ""
 
 function qs(obj: Record<string, any>): string {
   const parts: string[] = []

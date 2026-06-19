@@ -1,0 +1,14 @@
+[build]
+builder = "nixpacks"
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "python312"]
+
+[phases.build]
+cmds = [
+    "cd mym_desktop/frontend && npm install && npm run build",
+    "cd mym_desktop/backend && pip install -r requirements.txt"
+]
+
+[deploy]
+startCommand = "cd mym_desktop/backend && uvicorn main:app --host 0.0.0.0 --port $PORT"
