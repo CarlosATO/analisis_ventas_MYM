@@ -152,7 +152,7 @@ def plotly_theme(is_dark: bool) -> dict:
         font=dict(color=font_color, family="Inter, sans-serif"),
         xaxis=dict(gridcolor=grid_color, linecolor=grid_color, zerolinecolor=grid_color),
         yaxis=dict(gridcolor=grid_color, linecolor=grid_color, zerolinecolor=grid_color),
-        margin=dict(l=10, r=10, t=40, b=10),
+        margin=dict(l=10, r=10, t=65, b=10),
     )
 
 

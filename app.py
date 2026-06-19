@@ -263,6 +263,7 @@ st.markdown(
             <span>Ventas: <strong style="color:{TEXT_MAIN};">
                 {min_sales_date.strftime('%d-%m-%Y')} → {max_sales_date.strftime('%d-%m-%Y')}
             </strong></span>
+            <span>Fuente de datos: <strong style="color:{TEXT_MAIN};">archivos cargados manualmente por el usuario</strong></span>
             <span>Actualizado: <strong style="color:{TEXT_MAIN};">{fecha_carga}</strong></span>
             <span>Stock usado: <strong style="color:{TEXT_MAIN};">{stock_col}</strong></span>
             <span>SKU vendidos: <strong style="color:{TEXT_MAIN};">{cross['skus_sold']}</strong></span>

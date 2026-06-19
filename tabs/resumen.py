@@ -11,75 +11,8 @@ import plotly.graph_objects as go
 from analytics import build_sku_summary, classify_skus, weekly_sales, weekly_sales_by_sku
 from helpers import (
     fmt_money, fmt_pct, fmt_date,
-    suggest_action, dl_excel_btn, plotly_theme, theme_palette, MESES_ES, export_to_excel,
+    suggest_action, dl_excel_btn, plotly_theme, theme_palette, MESES_ES,
 )
-
-try:
-    from streamlit_plotly_events import plotly_events
-    _PLOTLY_EVENTS_AVAILABLE = True
-except ImportError:
-    _PLOTLY_EVENTS_AVAILABLE = False
-
-
-@st.dialog("Detalle de ventas", width="large")
-def week_detail_dialog(week_data, stock_global, sales_full, is_dark, p):
-    anio = week_data["anio"]
-    semana = week_data["semana"]
-    label = week_data["label"]
-    ACCENT = p["ACCENT"]
-    CARD_BG = p["CARD_BG"]
-    BORDER = p["BORDER"]
-
-    st.markdown(
-        f"<div style='text-align:center;font-size:1.2em;font-weight:bold;color:{ACCENT};'>"
-        f"Semana {semana} ({anio})</div>",
-        unsafe_allow_html=True,
-    )
-
-    det = weekly_sales_by_sku(sales_full, anio, semana)
-    if det.empty:
-        st.info("Sin ventas en esta semana.")
-        if st.button("Cerrar", type="primary", use_container_width=True):
-            st.session_state.selected_week = None
-            st.rerun()
-        return
-
-    venta_total_sem = det["Venta"].sum()
-    unidades_sem = det["Unidades"].sum()
-    margen_sem = det["Margen"].sum()
-    skus_sem = len(det)
-
-    stock_map = stock_global[["SKU", "Cantidad Disponible"]].drop_duplicates("SKU")
-    det = det.merge(stock_map, on="SKU", how="left")
-    det["Cantidad Disponible"] = det["Cantidad Disponible"].fillna(0).astype(int)
-    det = det.sort_values("Venta", ascending=False).reset_index(drop=True)
-    det.insert(0, "Ranking", range(1, len(det) + 1))
-
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Venta total", fmt_money(venta_total_sem))
-    k2.metric("Unidades vendidas", f"{unidades_sem:,.0f}".replace(",", "."))
-    k3.metric("Margen estimado", fmt_money(margen_sem))
-    k4.metric("SKUs vendidos", f"{skus_sem:,}".replace(",", "."))
-
-    cols_show = ["Ranking", "SKU", "Producto", "Venta", "Unidades", "Margen", "Cantidad Disponible"]
-    ren_map = {
-        "Producto": "Producto",
-        "Venta": "Venta",
-        "Unidades": "Unidades",
-        "Margen": "Margen estimado",
-        "Cantidad Disponible": "Stock disponible",
-    }
-    det_show = det[cols_show].rename(columns=ren_map).copy()
-    det_show["Venta"] = det_show["Venta"].apply(fmt_money)
-    det_show["Margen estimado"] = det_show["Margen estimado"].apply(fmt_money)
-    st.dataframe(det_show, hide_index=True, width="stretch")
-
-    dl_excel_btn(det, f"detalle_semanal_{anio}_{semana}.xlsx", sheet_name="Semana",
-                  label="Exportar detalle semanal a Excel")
-
-    if st.button("Cerrar", type="primary", use_container_width=True):
-        st.session_state.selected_week = None
-        st.rerun()
 
 
 def render_resumen(
@@ -170,84 +103,67 @@ def render_resumen(
             xaxis=dict(title="Semana"),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         )
+        st.plotly_chart(fig_week, use_container_width=True, height=480)
 
-        if _PLOTLY_EVENTS_AVAILABLE:
-            week_map = weekly_e.set_index("Label")[["Año", "Semana"]].to_dict("index")
-            week_map = {
-                k: {"Año": int(v["Año"]), "Semana": int(v["Semana"])}
-                for k, v in week_map.items()
+        # Detalle por semana
+        semana_opts = weekly_e.apply(
+            lambda r: (int(r["Año"]), int(r["Semana"]), r["Label"]), axis=1
+        ).tolist()
+        semana_labels = [s[2] for s in semana_opts]
+        sel_label = st.selectbox(
+            "Seleccionar semana para ver detalle de productos",
+            semana_labels, key="sel_semana_exec",
+        )
+        sel_anio, sel_sem, _ = semana_opts[semana_labels.index(sel_label)]
+
+        det = weekly_sales_by_sku(sales_full, sel_anio, sel_sem)
+        if not det.empty:
+            venta_total_sem = det["Venta"].sum()
+            unidades_sem    = det["Unidades"].sum()
+            margen_sem      = det["Margen"].sum()
+            skus_sem        = len(det)
+
+            stock_map = stock_global[["SKU", "Cantidad Disponible"]].drop_duplicates("SKU")
+            det = det.merge(stock_map, on="SKU", how="left")
+            det["Cantidad Disponible"] = det["Cantidad Disponible"].fillna(0).astype(int)
+            det = det.sort_values("Venta", ascending=False).reset_index(drop=True)
+            det.insert(0, "Ranking", range(1, len(det) + 1))
+
+            st.markdown(
+                f"""
+                <div style="background:{CARD_BG};border:1px solid {BORDER};border-left:5px solid {ACCENT};
+                            border-radius:6px;padding:12px 18px;margin-top:12px;margin-bottom:12px;">
+                    <strong style="color:{ACCENT};font-size:1.1em;">
+                        Detalle de ventas — {sel_label}
+                    </strong>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("Venta total",        fmt_money(venta_total_sem))
+            k2.metric("Unidades vendidas",  f"{unidades_sem:,.0f}".replace(",", "."))
+            k3.metric("Margen estimado",    fmt_money(margen_sem))
+            k4.metric("SKUs vendidos",      f"{skus_sem:,}".replace(",", "."))
+
+            cols_show = ["Ranking","SKU","Producto","Venta","Unidades","Margen","Cantidad Disponible"]
+            ren_map  = {
+                "Producto":             "Producto",
+                "Venta":                "Venta",
+                "Unidades":             "Unidades",
+                "Margen":               "Margen estimado",
+                "Cantidad Disponible":  "Stock disponible",
             }
-            clicked = plotly_events(fig_week, click_event=True, key="weekly_chart")
-            if clicked:
-                ev = clicked[0]
-                label = ev.get("x")
-                curve = ev.get("curveNumber", -1)
-                if curve == 0 and label and label in week_map:
-                    st.session_state.selected_week = {
-                        "label": label,
-                        "anio": week_map[label]["Año"],
-                        "semana": week_map[label]["Semana"],
-                    }
-                    st.rerun()
-        else:
-            st.plotly_chart(fig_week, width="stretch")
-            semana_opts = weekly_e.apply(
-                lambda r: (int(r["Año"]), int(r["Semana"]), r["Label"]), axis=1
-            ).tolist()
-            semana_labels = [s[2] for s in semana_opts]
-            sel_label = st.selectbox(
-                "Seleccionar semana para ver detalle de productos",
-                semana_labels, key="sel_semana_exec",
-            )
-            sel_anio, sel_sem, _ = semana_opts[semana_labels.index(sel_label)]
-            det = weekly_sales_by_sku(sales_full, sel_anio, sel_sem)
-            if not det.empty:
-                venta_total_sem = det["Venta"].sum()
-                unidades_sem = det["Unidades"].sum()
-                margen_sem = det["Margen"].sum()
-                skus_sem = len(det)
-                stock_map = stock_global[["SKU", "Cantidad Disponible"]].drop_duplicates("SKU")
-                det = det.merge(stock_map, on="SKU", how="left")
-                det["Cantidad Disponible"] = det["Cantidad Disponible"].fillna(0).astype(int)
-                det = det.sort_values("Venta", ascending=False).reset_index(drop=True)
-                det.insert(0, "Ranking", range(1, len(det) + 1))
-                st.markdown(
-                    f"""
-                    <div style="background:{CARD_BG};border:1px solid {BORDER};border-left:5px solid {ACCENT};
-                                border-radius:6px;padding:12px 18px;margin-top:12px;margin-bottom:12px;">
-                        <strong style="color:{ACCENT};font-size:1.1em;">
-                            Detalle de ventas — {sel_label}
-                        </strong>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                k1, k2, k3, k4 = st.columns(4)
-                k1.metric("Venta total", fmt_money(venta_total_sem))
-                k2.metric("Unidades vendidas", f"{unidades_sem:,.0f}".replace(",", "."))
-                k3.metric("Margen estimado", fmt_money(margen_sem))
-                k4.metric("SKUs vendidos", f"{skus_sem:,}".replace(",", "."))
-                cols_show = ["Ranking", "SKU", "Producto", "Venta", "Unidades", "Margen", "Cantidad Disponible"]
-                ren_map = {
-                    "Producto": "Producto",
-                    "Venta": "Venta",
-                    "Unidades": "Unidades",
-                    "Margen": "Margen estimado",
-                    "Cantidad Disponible": "Stock disponible",
-                }
-                det_show = det[cols_show].rename(columns=ren_map).copy()
-                det_show["Venta"] = det_show["Venta"].apply(fmt_money)
-                det_show["Margen estimado"] = det_show["Margen estimado"].apply(fmt_money)
-                st.dataframe(det_show, hide_index=True, width="stretch")
-                dl_excel_btn(det, f"detalle_semanal_{sel_anio}_{sel_sem}.xlsx",
-                              sheet_name="Semana", label="Exportar detalle semanal a Excel")
-            else:
-                st.info("Sin ventas en esa semana con los filtros actuales.")
+            det_show = det[cols_show].rename(columns=ren_map).copy()
+            det_show["Venta"]          = det_show["Venta"].apply(fmt_money)
+            det_show["Margen estimado"] = det_show["Margen estimado"].apply(fmt_money)
+            st.dataframe(det_show, hide_index=True, width="stretch")
 
-        if st.session_state.get("selected_week") is not None:
-            week_detail_dialog(
-                st.session_state.selected_week, stock_global, sales_full, is_dark, p,
-            )
+            dl_excel_btn(det, f"detalle_semanal_{sel_anio}_{sel_sem}.xlsx",
+                          sheet_name="Semana", label="Exportar detalle semanal a Excel")
+        else:
+            st.info("Sin ventas en esa semana con los filtros actuales.")
     else:
         st.info("No hay datos semanales para este período.")
 
@@ -296,7 +212,7 @@ def render_resumen(
             xaxis=dict(title="Mes", tickangle=-30),
             yaxis=dict(title="Venta Total ($)"),
         )
-        st.plotly_chart(fig_month, width="stretch")
+        st.plotly_chart(fig_month, use_container_width=True)
 
         m_show = monthly_grp[["Mes_Label","venta","unidades","margen","sku_activos","Ticket promedio"]].rename(columns={
             "Mes_Label":"Mes","venta":"Venta","unidades":"Unidades","margen":"Margen",
@@ -326,7 +242,7 @@ def render_resumen(
         fig_alert.update_layout(**plotly_theme(is_dark))
         fig_alert.update_xaxes(title_text="Alerta")
         fig_alert.update_yaxes(title_text="SKUs")
-        st.plotly_chart(fig_alert, width="stretch")
+        st.plotly_chart(fig_alert, use_container_width=True)
 
         alerta_sel = st.selectbox(
             "Seleccionar alerta para ver productos",
@@ -365,7 +281,7 @@ def render_resumen(
         fig_top.update_layout(**plotly_theme(is_dark))
         fig_top.update_xaxes(title_text="Venta ($)")
         fig_top.update_yaxes(title_text="")
-        st.plotly_chart(fig_top, width="stretch")
+        st.plotly_chart(fig_top, use_container_width=True)
 
         t15 = top15.reset_index(drop=True)
         t15.insert(0, "Ranking", range(1, len(t15) + 1))

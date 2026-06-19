@@ -1,74 +1,212 @@
-# Análisis de Ventas e Inventario MYM
+# Dashboard Comercial MYM
 
-Proyecto Python/Streamlit para analizar las ventas de los últimos 6 meses cruzadas con el stock disponible actual, adaptado para uso en escritorio en Windows.
+Aplicación de análisis comercial para MYM basada en archivos exportados desde Bsale. Permite cruzar ventas históricas con stock disponible para detectar oportunidades comerciales, riesgos de quiebre y productos inmovilizados.
 
-## Estructura del Proyecto
+## Tecnologías
 
-```text
-mym_analisis_ventas/
-├── app.py                   # Interfaz de usuario (Streamlit)
-├── analytics.py             # Lógica y cálculos de negocio
-├── data_loader.py           # Cargador y validador de datos
-├── launch_app.py            # Lanzador estilo escritorio (puerto libre dinámico + navegador automático)
-├── build_desktop.py         # Script de configuración de PyInstaller
-├── requirements.txt         # Dependencias del proyecto
-├── run_windows.bat          # Legacy launcher
-├── build_windows.bat        # Automatizador de empaquetado PyInstaller (.exe)
-├── run_desktop.bat          # Acceso directo para iniciar en escritorio
-└── README.md                # Este manual
+### Frontend
+
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- shadcn/ui
+- Recharts
+
+### Backend
+
+- FastAPI
+- pandas
+- openpyxl
+- xlsxwriter
+
+### Arquitectura prevista
+
+- React + FastAPI + Tauri (próxima fase)
+
+---
+
+## Estructura del proyecto
+
+```
+mym_desktop/
+├── backend/
+│   ├── main.py            # API FastAPI con endpoints de análisis
+│   ├── data_loader.py     # Carga y validación de archivos Excel
+│   ├── analytics.py       # Lógica de negocio y cálculos
+│   ├── exports.py         # Exportación a Excel con formato
+│   └── requirements.txt   # Dependencias Python
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx        # Componente principal
+│   │   ├── types.ts       # Tipos TypeScript
+│   │   ├── lib/
+│   │   │   ├── api.ts     # Cliente HTTP para FastAPI
+│   │   │   └── utils.ts   # Utilidades (cn)
+│   │   ├── components/
+│   │   │   └── ui/        # Componentes UI (Button, Dialog, Table, Card)
+│   │   └── index.css      # Estilos globales y tema
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── tsconfig.json
+└── README.md
 ```
 
----
+### Propósito de cada carpeta
 
-## Carga de Archivos de Entrada
-
-La aplicación procesa de forma cruzada dos archivos Excel separados (compatibles con `.xlsx` y `.xls`):
-
-### 1. Archivo de Ventas
-Contiene el histórico de ventas. La aplicación leerá por defecto la **primera hoja** del archivo. Debe incluir las siguientes columnas obligatorias:
-* `SKU`
-* `Producto / Servicio`
-* `Fecha y Hora Venta`
-* `Venta Total Bruta`
-* `Cantidad`
-
-### 2. Archivo de Stock
-Contiene el stock e inventario actual. La aplicación leerá por defecto la **primera hoja** del archivo. Debe incluir las siguientes columnas obligatorias:
-* `SKU`
-* `Cantidad Disponible`
-
-> [!NOTE]
-> Si subes los archivos de forma cruzada o vacíos, la aplicación lo detectará e indicará un error detallando cuáles columnas se esperaban y cuáles se encontraron en realidad.
+- **backend/** — API REST que procesa archivos Excel, ejecuta la lógica analítica y expone endpoints para el frontend.
+- **frontend/** — Aplicación React con interfaz de usuario moderna, gráficos interactivos y modales.
 
 ---
 
-## Formas de Ejecución
+## Requisitos
 
-### 1. Modo Escritorio (Recomendado para Usuarios)
-Permite arrancar el dashboard sin necesidad de abrir una consola o terminal manualmente.
-* Simplemente haz doble clic en el archivo **`run_desktop.bat`**.
-* Esto iniciará el servidor en un puerto libre de forma automática y abrirá tu navegador por defecto.
+### Backend
 
-Si deseas ejecutarlo desde consola/terminal:
+- Python 3.12 o superior
+
+### Frontend
+
+- Node.js LTS (18.x o 20.x)
+
+---
+
+## Instalación Backend
+
 ```bash
-source .venv/bin/activate && python launch_app.py
+cd mym_desktop/backend
+python -m venv .venv
 ```
 
-### 2. Modo Desarrollo
-Si necesitas hacer cambios en el código y contar con la recarga en tiempo real de Streamlit:
+Activar el entorno virtual:
+
+**macOS / Linux:**
 ```bash
-streamlit run app.py
+source .venv/bin/activate
 ```
 
-### 3. Modo Empaquetado (Generación de .exe)
-Para generar un binario ejecutable único de Windows (`dist/MYM_Analisis_Ventas.exe`) que funcione de forma autónoma:
-* Ejecuta el script **`build_windows.bat`**.
-* *Nota: Asegúrate de probar primero los modos Escritorio y Desarrollo para garantizar estabilidad antes de compilar.*
+**Windows:**
+```bat
+.venv\Scripts\activate
+```
+
+Instalar dependencias:
+
+```bash
+pip install -r requirements.txt
+```
 
 ---
 
-## Análisis y Hallazgos Disponibles
-* **Alertas Críticas:** Productos muertos con stock inmovilizado, alertas de quiebre crítico y riesgos de quiebre en base a rotación.
-* **Pareto 80/20:** Visualización del 80% de la facturación.
-* **Crecimiento/Caída:** Compara la rotación de los últimos 60 días contra el periodo anterior.
-* **Exportación Comercial:** Descarga de reportes limpios listos para gerencia.
+## Ejecutar Backend
+
+```bash
+cd mym_desktop/backend
+source .venv/bin/activate
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Verificar que la API responde:
+
+```
+http://localhost:8000/docs
+```
+
+---
+
+## Instalación Frontend
+
+```bash
+cd mym_desktop/frontend
+npm install
+```
+
+---
+
+## Ejecutar Frontend
+
+```bash
+cd mym_desktop/frontend
+npm run dev
+```
+
+Abrir en el navegador:
+
+```
+http://localhost:5173
+```
+
+---
+
+## Flujo de uso
+
+1. Cargar archivo de ventas (`.xlsx` o `.xls`).
+2. Cargar archivo de stock (`.xlsx` o `.xls`).
+3. Presionar **Cargar datos**.
+4. Revisar el estado del análisis (filas, SKU, período).
+5. Consultar la evolución semanal en el gráfico interactivo.
+6. Hacer clic en una barra para abrir el detalle semanal.
+7. Exportar el detalle a Excel desde el modal.
+
+---
+
+## Funcionalidades actuales (MVP)
+
+- Carga de archivos de ventas y stock.
+- Validación automática de columnas requeridas.
+- Detección dinámica de encabezados (filas variables según exportación de Bsale).
+- Normalización de SKU y tipos de datos.
+- Estado del análisis con métricas clave.
+- Gráfico de evolución semanal con barras cliqueables.
+- Modal de detalle semanal con KPIs y tabla de productos.
+- Exportación del detalle semanal a Excel con formato profesional.
+- Tema claro / oscuro.
+
+---
+
+## Próximas fases
+
+| Fase | Funcionalidad |
+|------|---------------|
+| Fase 3 | Hallazgos ejecutivos interactivos |
+| Fase 4 | Análisis Pareto 80/20 interactivo |
+| Fase 5 | Riesgo de quiebre, stock sin ventas, demanda histórica sin stock |
+| Fase 6 | Motor de recomendaciones prescriptivas basado en reglas de negocio |
+| Fase 7 | Empaquetado como aplicación de escritorio con Tauri |
+
+---
+
+## Notas importantes
+
+- Los archivos son cargados manualmente por el usuario. No se utilizan archivos internos fijos.
+- El stock se obtiene exclusivamente desde el archivo de stock cargado en cada sesión.
+- Las fechas, semanas y períodos se generan automáticamente desde los datos cargados.
+- El sistema funciona completamente offline una vez iniciado (sin dependencia de Google Fonts ni CDN externos).
+
+---
+
+## Historial técnico
+
+La primera versión de este proyecto fue desarrollada como prototipo en **Streamlit** para validar la lógica analítica y el modelo de datos. Debido a requerimientos de interacción avanzada (clics en gráficos, modales reales, experiencia de escritorio), la capa de interfaz fue migrada a **React + FastAPI + Tauri**. La lógica de negocio en Python (carga de datos, cálculos, exportación Excel) se mantiene intacta y reutilizada directamente desde la versión original.
+
+---
+
+## Columnas requeridas en los archivos de entrada
+
+### Archivo de ventas
+
+| Columna | Descripción |
+|---------|-------------|
+| SKU | Identificador único del producto |
+| Producto / Servicio | Nombre del producto |
+| Fecha y Hora Venta | Fecha y hora de la transacción |
+| Venta Total Bruta | Monto total de la venta |
+| Cantidad | Unidades vendidas |
+
+### Archivo de stock
+
+| Columna | Descripción |
+|---------|-------------|
+| SKU | Identificador único del producto |
+| Disponible o Stock | Cantidad disponible actual |
