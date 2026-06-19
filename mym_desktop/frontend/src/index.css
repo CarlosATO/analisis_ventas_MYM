@@ -106,9 +106,31 @@ button {
   color: #0f172a !important;
 }
 
-.repo-table .repo-sticky {
-  background-color: inherit !important;
-  box-shadow: 1px 0 0 var(--border);
+.repo-table td.repo-sticky {
+  background-color: #ffffff !important;
+}
+
+.repo-table tr:nth-child(even) td.repo-sticky {
+  background-color: #f8fafc !important;
+}
+
+.repo-table tr.repo-row-active td.repo-sticky {
+  background-color: #dbeafe !important;
+}
+
+.repo-table tr.repo-row-confirmed td.repo-sticky {
+  background-color: #dcfce7 !important;
+}
+
+.repo-table td.repo-sticky-edge,
+.repo-table th.repo-sticky-edge {
+  box-shadow: 6px 0 8px -6px rgba(0, 0, 0, 0.25);
+  clip-path: inset(0px -12px 0px 0px);
+}
+
+.repo-table tr.repo-row-active td.repo-sticky-edge {
+  box-shadow: 6px 0 8px -6px rgba(0, 0, 0, 0.3);
+  clip-path: inset(0px -12px 0px 0px);
 }
 
 .repo-table input {
@@ -143,6 +165,33 @@ button {
 
 .dark .repo-table td.repo-confirm {
   background-color: #10281f !important;
+}
+
+.dark .repo-table td.repo-sticky {
+  background-color: #162033 !important;
+}
+
+.dark .repo-table tr:nth-child(even) td.repo-sticky {
+  background-color: #111c2f !important;
+}
+
+.dark .repo-table tr.repo-row-active td.repo-sticky {
+  background-color: #12345a !important;
+}
+
+.dark .repo-table tr.repo-row-confirmed td.repo-sticky {
+  background-color: #123524 !important;
+}
+
+.dark .repo-table td.repo-sticky-edge,
+.dark .repo-table th.repo-sticky-edge {
+  box-shadow: 6px 0 8px -6px rgba(0, 0, 0, 0.5);
+  clip-path: inset(0px -12px 0px 0px);
+}
+
+.dark .repo-table tr.repo-row-active td.repo-sticky-edge {
+  box-shadow: 6px 0 8px -6px rgba(0, 0, 0, 0.55);
+  clip-path: inset(0px -12px 0px 0px);
 }
 
 .dark .repo-table tr.repo-row-active td {

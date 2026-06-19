@@ -17,28 +17,35 @@ function qs(obj: Record<string, any>): string {
   return parts.length ? "?" + parts.join("&") : ""
 }
 
+async function _handleResponse<T>(res: Response, label: string): Promise<T> {
+  if (!res.ok) {
+    let detail = res.statusText
+    try {
+      const body = await res.json()
+      detail = body.detail || detail
+    } catch { /* ignore */ }
+    console.error(`[API ERROR] ${label} (${res.status}):`, detail)
+    throw new Error(detail)
+  }
+  return res.json()
+}
+
 export async function uploadFiles(salesFile: File, stockFile: File): Promise<UploadResponse> {
   const form = new FormData()
   form.append("sales_file", salesFile)
   form.append("stock_file", stockFile)
   const res = await fetch(`${API}/api/upload`, { method: "POST", body: form })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || "Error al subir archivos")
-  }
-  return res.json()
+  return _handleResponse(res, "uploadFiles")
 }
 
 export async function getWeekly(analysisId: string): Promise<WeeklyResponse> {
   const res = await fetch(`${API}/api/${analysisId}/weekly`)
-  if (!res.ok) throw new Error("Error al obtener datos semanales")
-  return res.json()
+  return _handleResponse(res, "getWeekly")
 }
 
 export async function getWeekDetail(analysisId: string, year: number, week: number): Promise<WeekDetailResponse> {
   const res = await fetch(`${API}/api/${analysisId}/weekly/${year}/${week}`)
-  if (!res.ok) throw new Error("Error al obtener detalle semanal")
-  return res.json()
+  return _handleResponse(res, "getWeekDetail")
 }
 
 export function getWeeklyExportUrl(analysisId: string, year: number, week: number): string {
@@ -50,8 +57,7 @@ export async function getHallazgos(analysisId: string, opts?: {
 }): Promise<HallazgosResponse> {
   const params = { period: opts?.period, exclude_commercial: opts?.exclude_commercial, categoria: opts?.categoria, marca: opts?.marca }
   const res = await fetch(`${API}/api/${analysisId}/hallazgos${qs(params)}`)
-  if (!res.ok) throw new Error("Error al obtener hallazgos")
-  return res.json()
+  return _handleResponse(res, "getHallazgos")
 }
 
 export function getHallazgosExportUrl(analysisId: string, tipo: string): string {
@@ -63,8 +69,7 @@ export async function getPareto(analysisId: string, opts?: {
 }): Promise<ParetoResponse> {
   const params = { period: opts?.period, exclude_commercial: opts?.exclude_commercial }
   const res = await fetch(`${API}/api/${analysisId}/pareto${qs(params)}`)
-  if (!res.ok) throw new Error("Error al obtener Pareto")
-  return res.json()
+  return _handleResponse(res, "getPareto")
 }
 
 export function getParetoExportUrl(analysisId: string): string {
@@ -76,8 +81,7 @@ export async function getStockSinVentas(analysisId: string, opts?: {
 }): Promise<StockSinVentasResponse> {
   const params = { period: opts?.period, exclude_commercial: opts?.exclude_commercial, categoria: opts?.categoria, marca: opts?.marca, stock_min: opts?.stock_min }
   const res = await fetch(`${API}/api/${analysisId}/stock-sin-ventas${qs(params)}`)
-  if (!res.ok) throw new Error("Error al obtener stock sin ventas")
-  return res.json()
+  return _handleResponse(res, "getStockSinVentas")
 }
 
 export function getStockSinVentasExportUrl(analysisId: string): string {
@@ -89,14 +93,12 @@ export async function getDemandaSinStock(analysisId: string, opts?: {
 }): Promise<DemandaSinStockResponse> {
   const params = { period: opts?.period, exclude_commercial: opts?.exclude_commercial, venta_min: opts?.venta_min, dias_min: opts?.dias_min }
   const res = await fetch(`${API}/api/${analysisId}/demanda-sin-stock${qs(params)}`)
-  if (!res.ok) throw new Error("Error al obtener demanda sin stock")
-  return res.json()
+  return _handleResponse(res, "getDemandaSinStock")
 }
 
 export async function getDemandaHistory(analysisId: string, sku: string): Promise<{ sku: string; weeks: { label: string; venta: number; unidades: number }[] }> {
   const res = await fetch(`${API}/api/${analysisId}/demanda-sin-stock/${encodeURIComponent(sku)}/history`)
-  if (!res.ok) throw new Error("Error al obtener historial")
-  return res.json()
+  return _handleResponse(res, "getDemandaHistory")
 }
 
 export function getDemandaExportUrl(analysisId: string): string {
@@ -108,8 +110,7 @@ export async function getQuiebres(analysisId: string, opts?: {
 }): Promise<QuiebresResponse> {
   const params = { period: opts?.period, exclude_commercial: opts?.exclude_commercial }
   const res = await fetch(`${API}/api/${analysisId}/quiebres${qs(params)}`)
-  if (!res.ok) throw new Error("Error al obtener quiebres")
-  return res.json()
+  return _handleResponse(res, "getQuiebres")
 }
 
 export function getQuiebresExportUrl(analysisId: string): string {
@@ -121,8 +122,7 @@ export async function getCaidasCrecimiento(analysisId: string, opts?: {
 }): Promise<CaidasCrecimientoResponse> {
   const params = { period: opts?.period, exclude_commercial: opts?.exclude_commercial, umbral_pct: opts?.umbral_pct }
   const res = await fetch(`${API}/api/${analysisId}/caidas-crecimiento${qs(params)}`)
-  if (!res.ok) throw new Error("Error al obtener caídas/crecimiento")
-  return res.json()
+  return _handleResponse(res, "getCaidasCrecimiento")
 }
 
 export function getCaidasCrecimientoExportUrl(analysisId: string, tipo: string): string {
@@ -134,8 +134,7 @@ export async function getReposicionFiltros(analysisId: string, opts?: {
 }): Promise<ReposicionFiltrosResponse> {
   const params = { exclude_commercial: opts?.exclude_commercial }
   const res = await fetch(`${API}/api/${analysisId}/reposicion/filtros${qs(params)}`)
-  if (!res.ok) throw new Error("Error al obtener filtros de reposición")
-  return res.json()
+  return _handleResponse(res, "getReposicionFiltros")
 }
 
 export async function getReposicion(analysisId: string, opts?: {
@@ -152,8 +151,7 @@ export async function getReposicion(analysisId: string, opts?: {
     incluir_sin_stock_sin_venta: opts?.incluir_sin_stock_sin_venta,
   }
   const res = await fetch(`${API}/api/${analysisId}/reposicion${qs(params)}`)
-  if (!res.ok) throw new Error("Error al obtener reposición inteligente")
-  return res.json()
+  return _handleResponse(res, "getReposicion")
 }
 
 export function getReposicionExportUrl(analysisId: string, opts?: {
@@ -172,14 +170,26 @@ export function getReposicionExportUrl(analysisId: string, opts?: {
   return `${API}/api/${analysisId}/export/reposicion${params}`
 }
 
+async function _handleBlobResponse(res: Response, label: string): Promise<Blob> {
+  if (!res.ok) {
+    let detail = res.statusText
+    try {
+      const body = await res.json()
+      detail = body.detail || detail
+    } catch { /* ignore */ }
+    console.error(`[API ERROR] ${label} (${res.status}):`, detail)
+    throw new Error(detail)
+  }
+  return res.blob()
+}
+
 export async function exportReposicionConfirmados(analysisId: string, productos: (ReposicionProducto & { cantidad_confirmada: number })[]): Promise<Blob> {
   const res = await fetch(`${API}/api/${analysisId}/export/reposicion/confirmados`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(productos),
   })
-  if (!res.ok) throw new Error("Error al exportar productos confirmados")
-  return res.blob()
+  return _handleBlobResponse(res, "exportReposicionConfirmados")
 }
 
 export async function exportReposicionPlan(analysisId: string, format: "excel" | "pdf", payload: Record<string, any>): Promise<Blob> {
@@ -188,6 +198,5 @@ export async function exportReposicionPlan(analysisId: string, format: "excel" |
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   })
-  if (!res.ok) throw new Error(`Error al exportar ${format.toUpperCase()}`)
-  return res.blob()
+  return _handleBlobResponse(res, `exportReposicionPlan/${format}`)
 }

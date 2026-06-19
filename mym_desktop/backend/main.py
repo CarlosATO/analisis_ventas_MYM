@@ -5,7 +5,9 @@ Reutiliza data_loader.py, analytics.py y exports.py del proyecto Streamlit.
 
 import io
 import os
+import sys
 import uuid
+import traceback
 import numpy as np
 from pathlib import Path
 from datetime import datetime
@@ -100,58 +102,62 @@ async def upload_files(
         sales_bytes = await sales_file.read()
         stock_bytes = await stock_file.read()
     except Exception as e:
-        raise HTTPException(400, f"Error al leer archivos: {e}")
+        traceback.print_exc()
+        raise HTTPException(400, detail=f"Error al leer archivos: {e}")
 
     sales_io = io.BytesIO(sales_bytes)
     stock_io = io.BytesIO(stock_bytes)
 
     try:
         sales_df, stock_df, diagnostics = load_files(sales_io, stock_io)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
 
-    min_date = sales_df["Fecha"].min()
-    max_date = sales_df["Fecha"].max()
+        min_date = sales_df["Fecha"].min()
+        max_date = sales_df["Fecha"].max()
 
-    skus_sold = set(sales_df["SKU"].unique())
-    skus_stock = set(stock_df["SKU"].unique())
+        skus_sold = set(sales_df["SKU"].unique())
+        skus_stock = set(stock_df["SKU"].unique())
 
-    cross_metrics = {
-        "skus_sold": len(skus_sold),
-        "skus_stock": len(skus_stock),
-        "skus_crossed": len(skus_sold & skus_stock),
-        "skus_sold_no_stock": len(skus_sold - skus_stock),
-        "skus_stock_no_sales": len(skus_stock - skus_sold),
-    }
+        cross_metrics = {
+            "skus_sold": len(skus_sold),
+            "skus_stock": len(skus_stock),
+            "skus_crossed": len(skus_sold & skus_stock),
+            "skus_sold_no_stock": len(skus_sold - skus_stock),
+            "skus_stock_no_sales": len(skus_stock - skus_sold),
+        }
 
-    analysis_id = str(uuid.uuid4())[:8]
+        analysis_id = str(uuid.uuid4())[:8]
 
-    analyses[analysis_id] = {
-        "sales": sales_df,
-        "stock": stock_df,
-        "diagnostics": diagnostics,
-        "cross_metrics": cross_metrics,
-        "min_date": min_date,
-        "max_date": max_date,
-    }
+        analyses[analysis_id] = {
+            "sales": sales_df,
+            "stock": stock_df,
+            "diagnostics": diagnostics,
+            "cross_metrics": cross_metrics,
+            "min_date": min_date,
+            "max_date": max_date,
+        }
 
-    return {
-        "analysis_id": analysis_id,
-        "diagnostics": {
-            "sales_rows": diagnostics["sales_rows"],
-            "stock_rows": diagnostics["stock_rows"],
-            "sales_header_row": diagnostics["sales_header_row"],
-            "stock_header_row": diagnostics["stock_header_row"],
-            "stock_col_origin": diagnostics["stock_col_origin"],
-            "stock_col_origin_type": diagnostics["stock_col_origin_type"],
-        },
-        "cross_metrics": cross_metrics,
-        "date_range": {
-            "min": min_date.strftime("%d-%m-%Y"),
-            "max": max_date.strftime("%d-%m-%Y"),
-        },
-        "status": "ok",
-    }
+        return {
+            "analysis_id": analysis_id,
+            "diagnostics": {
+                "sales_rows": diagnostics["sales_rows"],
+                "stock_rows": diagnostics["stock_rows"],
+                "sales_header_row": diagnostics["sales_header_row"],
+                "stock_header_row": diagnostics["stock_header_row"],
+                "stock_col_origin": diagnostics["stock_col_origin"],
+                "stock_col_origin_type": diagnostics["stock_col_origin_type"],
+            },
+            "cross_metrics": cross_metrics,
+            "date_range": {
+                "min": min_date.strftime("%d-%m-%Y"),
+                "max": max_date.strftime("%d-%m-%Y"),
+            },
+            "status": "ok",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Weekly ──
@@ -822,6 +828,11 @@ def get_reposicion_filtros(analysis_id: str, exclude_commercial: bool = Query(Tr
         stock = stock.merge(supplier_map, on="SKU", how="left")
 
     if "Proveedor" not in stock.columns:
+        if "Tipo de Producto / Servicio" in sales.columns:
+            supplier_map = sales[["SKU", "Tipo de Producto / Servicio"]].dropna(subset=["Tipo de Producto / Servicio"]).drop_duplicates("SKU")
+            supplier_map = supplier_map.rename(columns={"Tipo de Producto / Servicio": "Proveedor"})
+            stock = stock.merge(supplier_map, on="SKU", how="left")
+    if "Proveedor" not in stock.columns:
         stock["Proveedor"] = "Sin Proveedor"
     if "Marca" not in stock.columns:
         stock["Marca"] = "Sin Marca"
@@ -838,7 +849,7 @@ def get_reposicion_filtros(analysis_id: str, exclude_commercial: bool = Query(Tr
         "marcas": _options("Marca"),
         "categorias": _options("Categoría"),
         "proveedor_disponible": proveedor_disponible,
-        "aviso_proveedor": "" if proveedor_disponible else "El archivo cargado no contiene proveedor. Para filtrar por proveedor se requiere agregar esta columna o un catálogo auxiliar.",
+        "aviso_proveedor": "" if proveedor_disponible else "No se detectó columna de proveedor explícita. Los proveedores se están tomando desde 'Tipo de Producto / Servicio'.",
     }
 
 @app.get("/api/{analysis_id}/reposicion")

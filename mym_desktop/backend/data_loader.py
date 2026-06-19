@@ -1,6 +1,7 @@
+import sys
+import traceback
 import pandas as pd
 import numpy as np
-from pathlib import Path
 
 REQUIRED_SALES_COLUMNS = [
     "SKU",
@@ -15,6 +16,37 @@ REQUIRED_STOCK_COLUMNS = [
     "Cantidad Disponible",
 ]
 
+def _norm(name: str) -> str:
+    """Normaliza un nombre: elimina acentos, mayúsculas, espacios/guiones a _."""
+    import unicodedata
+    text = unicodedata.normalize("NFKD", str(name).strip())
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    return text.upper().replace(" ", "_").replace("-", "_").replace("/", "_")
+
+def _find_column(df: pd.DataFrame, aliases: set[str]) -> str | None:
+    """Busca una columna en el DataFrame que coincida con algún alias (todo en MAYÚSCULAS)."""
+    norm_aliases = {_norm(a) for a in aliases}
+    for col in df.columns:
+        if _norm(col) in norm_aliases:
+            return col
+    return None
+
+def _match_col(df: pd.DataFrame, *names: str) -> str | None:
+    """Devuelve la primera columna del DataFrame que normalizada coincida con algún name dado."""
+    targets = {_norm(n) for n in names}
+    for col in df.columns:
+        if _norm(col) in targets:
+            return col
+    return None
+
+def _drop_duplicate_columns(df: pd.DataFrame, file_type: str) -> pd.DataFrame:
+    """Evita errores de pandas cuando el Excel trae columnas repetidas o alias duplicados."""
+    duplicated = df.columns[df.columns.duplicated()].tolist()
+    if duplicated:
+        print(f"Columnas duplicadas en {file_type}; se conserva la primera: {duplicated}", file=sys.stderr)
+        df = df.loc[:, ~df.columns.duplicated()].copy()
+    return df
+
 def _clean_column_names(df: pd.DataFrame) -> pd.DataFrame:
     """Normaliza espacios accidentales en nombres de columnas."""
     df = df.copy()
@@ -26,14 +58,7 @@ def _to_number(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce").fillna(0)
 
 def _normalize_sku(series: pd.Series) -> pd.Series:
-    """
-    Normaliza el SKU según las reglas:
-    - Convertir a texto.
-    - Quitar espacios al inicio y al final.
-    - Eliminar ".0" si Excel lo convirtió desde número.
-    - Convertir valores vacíos, nan o None en cadena vacía.
-    """
-    def _norm(val):
+    def _sku_norm(val):
         if pd.isna(val) or val is None:
             return ""
         s = str(val).strip()
@@ -42,166 +67,153 @@ def _normalize_sku(series: pd.Series) -> pd.Series:
         if s.lower() in ["nan", "none", "null", ""]:
             return ""
         return s
-    return series.apply(_norm)
+    return series.apply(_sku_norm)
 
-def _load_file_with_dynamic_header(file_obj, file_type: str) -> tuple[pd.DataFrame, int, list[str]]:
-    """
-    Carga un archivo Excel buscando de forma dinámica la fila de cabecera.
-    """
+SKU_ALIASES = {"SKU", "CODIGO", "CÓDIGO", "SKU_PRODUCTO", "CODIGO_PRODUCTO", "CÓDIGO_PRODUCTO", "ID_PRODUCTO", "ID", "COD", "CODE"}
+SALES_HEADER_ALIASES = {"PRODUCTO___SERVICIO", "FECHA_DE_EMISION", "FECHA_Y_HORA_VENTA", "VENTA_TOTAL_BRUTA", "VENTA_TOTAL_NETA", "CANTIDAD"}
+STOCK_HEADER_ALIASES = {"SKU", "PRODUCTO", "CANTIDAD_DISPONIBLE", "STOCK", "TIPO_DE_PRODUCTO", "MARCA"}
+
+def _load_file_with_dynamic_header(file_obj, file_type: str, min_match: int = 2) -> tuple[pd.DataFrame, int, list[str]]:
+    if not hasattr(file_obj, "read"):
+        raise ValueError(f"El objeto recibido para {file_type} no es un flujo de bytes válido")
+    file_obj.seek(0)
     try:
-        # Cargamos todo sin cabeceras para buscar la fila correcta
         df_raw = pd.read_excel(file_obj, header=None)
     except Exception as e:
-        raise ValueError(f"Error al leer el archivo de {file_type}: {e}")
+        traceback.print_exc()
+        raise ValueError(f"Error al leer el archivo de {file_type}. Verifique que sea un Excel válido. Detalle: {e}")
 
-    header_idx = None
+    header_idx = 0
+    if file_type == "ventas":
+        targets = {_norm(a) for a in SALES_HEADER_ALIASES}
+    else:
+        targets = {_norm(a) for a in STOCK_HEADER_ALIASES}
 
     for idx, row in df_raw.iterrows():
-        # Convertimos las celdas no vacías a texto limpio en minúsculas
-        row_str = [str(val).strip().lower() for val in row if pd.notna(val)]
+        row_norm = {_norm(str(v)) for v in row if pd.notna(v)}
+        matches = len(row_norm & targets)
+        if matches >= min_match and _norm("sku") in row_norm:
+            header_idx = idx
+            break
 
-        if file_type == "ventas":
-            # Debe contener "sku" y al menos una columna más de ventas
-            has_sku = any(s == "sku" for s in row_str)
-            has_other = any(
-                col in row_str
-                for col in [
-                    "producto / servicio",
-                    "fecha y hora venta",
-                    "venta total bruta",
-                    "cantidad",
-                ]
-            )
-            if has_sku and has_other:
-                header_idx = idx
-                break
-        elif file_type == "stock":
-            # Debe contener "sku" y además ("stock" o "disponible")
-            has_sku = any(s == "sku" for s in row_str)
-            has_stock = any("stock" in s or "disponible" in s for s in row_str)
-            if has_sku and has_stock:
-                header_idx = idx
-                break
-
-    if header_idx is None:
-        header_idx = 0
-
-    # Extraemos las cabeceras originales
     raw_headers = list(df_raw.iloc[header_idx])
     headers = [str(col).strip() if pd.notna(col) else f"Col_{i}" for i, col in enumerate(raw_headers)]
 
-    # Creamos el DataFrame reestructurado
     df = df_raw.iloc[header_idx + 1 :].copy()
     df.columns = headers
     df = df.reset_index(drop=True)
 
-    # Mostrar en consola
     print(f"Fila de encabezado detectada en {file_type}: {header_idx}")
 
     return df, header_idx, raw_headers
+
+def _map_columns_sales(sales_raw: pd.DataFrame) -> pd.DataFrame:
+    df = sales_raw.copy()
+    col_map: dict[str, str] = {}
+
+    col = _match_col(df, "SKU", "CODIGO", "CÓDIGO", "SKU_PRODUCTO", "CODIGO_PRODUCTO", "ID")
+    if col:
+        col_map[col] = "SKU"
+
+    col = _match_col(df, "PRODUCTO / SERVICIO", "PRODUCTO")
+    if col:
+        col_map[col] = "Producto / Servicio"
+
+    col = _match_col(df, "FECHA DE EMISION", "FECHA Y HORA VENTA", "FECHA")
+    if col:
+        col_map[col] = "Fecha y Hora Venta"
+
+    col = _match_col(df, "VENTA TOTAL BRUTA", "VENTA TOTAL NETA", "VENTA", "TOTAL VENTA")
+    if col:
+        col_map[col] = "Venta Total Bruta"
+
+    col = _match_col(df, "CANTIDAD", "UNIDADES", "QTY")
+    if col:
+        col_map[col] = "Cantidad"
+
+    col = _match_col(df, "TIPO DE PRODUCTO / SERVICIO", "TIPO DE PRODUCTO", "PROVEEDOR")
+    if col:
+        col_map[col] = "Tipo de Producto / Servicio"
+
+    col = _match_col(df, "MARCA")
+    if col:
+        col_map[col] = "Marca"
+
+    for c in df.columns:
+        if c not in col_map:
+            col_map[c] = str(c).strip()
+
+    missing = [k for k in ("SKU", "Producto / Servicio", "Fecha y Hora Venta", "Venta Total Bruta", "Cantidad") if k not in col_map.values()]
+    if missing:
+        raise ValueError(
+            f"Columnas requeridas faltantes en ventas: {missing}. "
+            f"Columnas detectadas en el archivo: {list(df.columns)}"
+        )
+
+    df.columns = [col_map[c] for c in df.columns]
+    df = _drop_duplicate_columns(df, "ventas")
+    return df
+
+
+def _map_columns_stock(stock_raw: pd.DataFrame) -> tuple[pd.DataFrame, str, str]:
+    df = stock_raw.copy()
+    col_map: dict[str, str] = {}
+
+    col = _match_col(df, "SKU", "CODIGO", "CÓDIGO", "SKU_PRODUCTO", "CODIGO_PRODUCTO", "ID")
+    if col:
+        col_map[col] = "SKU"
+
+    col = _match_col(df, "PRODUCTO")
+    if col:
+        col_map[col] = "Producto"
+
+    col_stock = _match_col(df, "CANTIDAD DISPONIBLE", "STOCK", "STOCK DISPONIBLE", "DISPONIBLE")
+    if col_stock:
+        col_map[col_stock] = "Cantidad Disponible"
+
+    col = _match_col(df, "TIPO DE PRODUCTO", "CATEGORIA", "CATEGORÍA")
+    if col:
+        col_map[col] = "Tipo de Producto"
+
+    col = _match_col(df, "MARCA")
+    if col:
+        col_map[col] = "Marca"
+
+    for c in df.columns:
+        if c not in col_map:
+            col_map[c] = str(c).strip()
+
+    missing = [k for k in ("SKU", "Cantidad Disponible") if k not in col_map.values()]
+    if missing:
+        raise ValueError(
+            f"Columnas requeridas faltantes en stock: {missing}. "
+            f"Columnas detectadas en el archivo: {list(df.columns)}"
+        )
+
+    df.columns = [col_map[c] for c in df.columns]
+    df = _drop_duplicate_columns(df, "stock")
+    origen_stock = col_stock or "Cantidad Disponible"
+    tipo_stock = "Disponible" if "DISPONIBLE" in _norm(origen_stock) else "Stock (Fallback)"
+    return df, origen_stock, tipo_stock
+
 
 def load_files(sales_file, stock_file) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """
     Carga los archivos de ventas y stock de MYM.
     Normaliza encabezados y aplica reglas de negocio para la columna de Stock Disponible.
     """
-    # 1. Cargar con detección de cabeceras
     sales_raw, sales_header_row, sales_original_cols = _load_file_with_dynamic_header(sales_file, "ventas")
     stock_raw, stock_header_row, stock_original_cols = _load_file_with_dynamic_header(stock_file, "stock")
 
-    # 2. Sistema de Alias y Normalización para Ventas
-    sales_cols_map = {}
-    normalized_sales_cols = []
-    for col in sales_raw.columns:
-        col_lower = str(col).strip().lower()
-        if col_lower == "sku":
-            normalized_sales_cols.append("SKU")
-            sales_cols_map[col] = "SKU"
-        elif col_lower == "producto / servicio":
-            normalized_sales_cols.append("Producto / Servicio")
-            sales_cols_map[col] = "Producto / Servicio"
-        elif col_lower == "fecha y hora venta":
-            normalized_sales_cols.append("Fecha y Hora Venta")
-            sales_cols_map[col] = "Fecha y Hora Venta"
-        elif col_lower == "venta total bruta":
-            normalized_sales_cols.append("Venta Total Bruta")
-            sales_cols_map[col] = "Venta Total Bruta"
-        elif col_lower == "cantidad":
-            normalized_sales_cols.append("Cantidad")
-            sales_cols_map[col] = "Cantidad"
-        elif "linea" in col_lower or "tema" in col_lower:
-            normalized_sales_cols.append("Línea / Tema de producto")
-            sales_cols_map[col] = "Línea / Tema de producto"
-        else:
-            normalized_sales_cols.append(str(col).strip())
-    sales_raw.columns = normalized_sales_cols
+    sales = _map_columns_sales(sales_raw)
+    stock, columna_origen_stock_disponible, stock_col_origin_type = _map_columns_stock(stock_raw)
 
-    # 3. Sistema de Alias y Prioridad para Stock
-    # Prioridad: 1. Disponible, 2. Stock (Fallback)
-    disponible_col = None
-    stock_col_fallback = None
+    sales["SKU"] = _normalize_sku(sales["SKU"])
+    stock["SKU"] = _normalize_sku(stock["SKU"])
 
-    for col in stock_raw.columns:
-        col_lower = str(col).strip().lower()
-        if "disponible" in col_lower:
-            disponible_col = col
-            break
-        elif "stock" in col_lower:
-            if stock_col_fallback is None:
-                stock_col_fallback = col
+    sales = sales[sales["SKU"] != ""].copy()
+    stock = stock[stock["SKU"] != ""].copy()
 
-    columna_origen_stock_disponible = None
-    if disponible_col is not None:
-        columna_origen_stock_disponible = disponible_col
-        stock_col_origin_type = "Disponible"
-    elif stock_col_fallback is not None:
-        columna_origen_stock_disponible = stock_col_fallback
-        stock_col_origin_type = "Stock (Fallback)"
-    else:
-        raise ValueError(
-            "El archivo de stock no contiene las columnas mínimas esperadas. "
-            "No se encontró una columna que represente el Stock Disponible (e.g. 'Disponible' o 'Stock')."
-        )
-
-    normalized_stock_cols = []
-    for col in stock_raw.columns:
-        col_lower = str(col).strip().lower()
-        if col == columna_origen_stock_disponible:
-            normalized_stock_cols.append("Cantidad Disponible")
-        elif col_lower == "sku":
-            normalized_stock_cols.append("SKU")
-        elif col_lower == "producto":
-            normalized_stock_cols.append("Producto")
-        elif "linea" in col_lower or "tema" in col_lower:
-            normalized_stock_cols.append("Línea / Tema de producto")
-        else:
-            normalized_stock_cols.append(str(col).strip())
-    stock_raw.columns = normalized_stock_cols
-
-    # 4. Validar columnas mínimas obligatorias después de alias
-    missing_sales = [c for c in REQUIRED_SALES_COLUMNS if c not in sales_raw.columns]
-    missing_stock = [c for c in REQUIRED_STOCK_COLUMNS if c not in stock_raw.columns]
-
-    if missing_sales:
-        raise ValueError(
-            f"El archivo de ventas no contiene las columnas mínimas esperadas. "
-            f"Faltan: {missing_sales}. Columnas detectadas: {list(sales_original_cols)}"
-        )
-
-    if missing_stock:
-        raise ValueError(
-            f"El archivo de stock no contiene las columnas mínimas esperadas. "
-            f"Faltan: {missing_stock}. Columnas detectadas: {list(stock_original_cols)}"
-        )
-
-    # 5. Normalización de SKU y Exclusión de Valores Vacíos
-    sales_raw["SKU"] = _normalize_sku(sales_raw["SKU"])
-    stock_raw["SKU"] = _normalize_sku(stock_raw["SKU"])
-
-    sales = sales_raw[sales_raw["SKU"] != ""].copy()
-    stock = stock_raw[stock_raw["SKU"] != ""].copy()
-
-    # 6. Conversión de Fechas y Tipos
     sales["Fecha"] = pd.to_datetime(
         sales["Fecha y Hora Venta"],
         errors="coerce",
@@ -209,40 +221,34 @@ def load_files(sales_file, stock_file) -> tuple[pd.DataFrame, pd.DataFrame, dict
     )
 
     for col in [
-        "Venta Total Bruta",
-        "Venta Total Neta",
-        "Cantidad",
-        "Costo Total Neto",
-        "Margen",
-        "Descuento Bruto",
-        "% Descuento",
-        "% Margen",
+        "Venta Total Bruta", "Venta Total Neta", "Cantidad",
+        "Costo Total Neto", "Margen", "Descuento Bruto",
+        "% Descuento", "% Margen",
     ]:
         if col in sales.columns:
             sales[col] = _to_number(sales[col])
 
     for col in [
-        "Cantidad Disponible",
-        "Stock",
-        "Costo Neto Prom. Unitario",
-        "Costo Neto Prom. Total",
-        "Cantidad por Despachar",
-        "Por recibir",
-        "Precio Venta Bruto",
-        "Margen Unitario",
-        "Último costo",
+        "Cantidad Disponible", "Stock",
+        "Costo Neto Prom. Unitario", "Costo Neto Prom. Total",
+        "Cantidad por Despachar", "Por recibir", "Precio Venta Bruto",
+        "Margen Unitario", "Último costo",
     ]:
         if col in stock.columns:
             stock[col] = _to_number(stock[col])
 
-    # Columnas derivadas de fecha
     sales = sales.dropna(subset=["Fecha"])
+    if sales.empty:
+        raise ValueError(
+            "Ninguna fila de ventas tiene una fecha válida después del procesamiento. "
+            "Verifique que la columna de fecha (ej. 'Fecha de Emisión' o 'Fecha y Hora Venta') "
+            "contenga fechas en formato día/mes/año."
+        )
     sales["Mes"] = sales["Fecha"].dt.to_period("M").astype(str)
     sales["Semana"] = sales["Fecha"].dt.isocalendar().week.astype(int)
     sales["Año"] = sales["Fecha"].dt.year
     sales["Mes_Num"] = sales["Fecha"].dt.month
 
-    # 7. Diagnósticos
     diagnostics = {
         "sales_header_row": sales_header_row,
         "stock_header_row": stock_header_row,

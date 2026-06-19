@@ -407,6 +407,7 @@ SUPPLIER_ALIASES = {
     "razon social proveedor",
     "supplier",
     "vendor",
+    "tipo de producto / servicio",
 }
 
 MONTHS_ES = {
@@ -644,7 +645,7 @@ def calculo_reposicion(
             "incluir_sin_stock_sin_venta": incluir_sin_stock_sin_venta
         },
         "proveedor_disponible": proveedor_disponible,
-        "aviso_proveedor": "" if proveedor_disponible else "El archivo cargado no contiene proveedor. Para filtrar por proveedor se requiere agregar esta columna o un catálogo auxiliar.",
+        "aviso_proveedor": "" if proveedor_disponible else "No se detectó columna de proveedor explícita. Los proveedores se están tomando desde 'Tipo de Producto / Servicio'.",
         "resumen": {
             "proveedor_seleccionado": proveedor or "Todos",
             "sku_evaluados": sku_evaluados,

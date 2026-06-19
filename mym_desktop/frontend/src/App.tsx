@@ -143,6 +143,7 @@ export default function App() {
   const [weeklyData, setWeeklyData] = useState<WeeklyPoint[]>([])
   const [detail, setDetail] = useState<WeekDetailResponse | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [toastError, setToastError] = useState<string | null>(null)
 
   // Hallazgos
   const [hallazgos, setHallazgos] = useState<HallazgosResponse | null>(null)
@@ -345,7 +346,7 @@ export default function App() {
       a.download = format === "excel" ? "sugerido_compras_mym.xlsx" : "sugerido_compras_mym.pdf"
       a.click()
       URL.revokeObjectURL(url)
-    } catch (e: any) { alert(e.message) }
+    } catch (e: any) { setToastError(e.message) }
   }
 
   const repoCellClass = (col: string, extra = "") => `${extra} ${repoColActiva === col ? "bg-sky-500/15" : ""}`.trim()
@@ -364,7 +365,7 @@ export default function App() {
       else if (t === "quiebres") await loadQuiebres()
       else if (t === "caidas") await loadCaidas()
       else if (t === "reposicion") { await loadReposicionFiltros(); await loadReposicion() }
-    } catch (e: any) { alert(e.message) }
+    } catch (e: any) { setToastError(e.message) }
   }
 
   const handleBarClick = async (data: any) => {
@@ -372,7 +373,7 @@ export default function App() {
     const p = data.activePayload[0].payload as WeeklyPoint
     setDetailLoading(true)
     try { setDetail(await getWeekDetail(analysisId, p.year, p.week)) }
-    catch (e: any) { alert(e.message) }
+    catch (e: any) { setToastError(e.message) }
     finally { setDetailLoading(false) }
   }
 
@@ -389,6 +390,7 @@ export default function App() {
 
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [uploadPhase, setUploadPhase] = useState<"idle" | "waiting_sales" | "waiting_stock" | "uploading" | "done">("idle")
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const salesInputRef = useRef<HTMLInputElement>(null)
   const stockInputRef = useRef<HTMLInputElement>(null)
   const pendingSalesFile = useRef<File | null>(null)
@@ -411,6 +413,7 @@ export default function App() {
     if (!file) { setUploadPhase("idle"); return }
     const salesFileVal = pendingSalesFile.current
     if (!salesFileVal) { setUploadPhase("idle"); return }
+    setUploadError(null)
     setUploadPhase("uploading")
     try {
       const res = await uploadFiles(salesFileVal, file)
@@ -424,11 +427,20 @@ export default function App() {
       setWeeklyData(weekly.weeks.filter(w => w.venta >= 0))
       setUploadPhase("done")
       setTab("reposicion")
-    } catch (err: any) { alert(err.message); setUploadPhase("idle") }
+    } catch (err: any) { setUploadError(err.message ?? "Error al procesar los archivos. Intente nuevamente."); setUploadPhase("idle") }
   }
 
   return (
     <div className="h-screen flex overflow-hidden" style={{ backgroundColor: "var(--background)" }}>
+      {toastError && (
+        <div className="fixed top-4 right-4 z-[9999] max-w-md rounded-lg border border-red-300 bg-red-50 p-4 shadow-xl dark:bg-red-950 dark:border-red-800">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 shrink-0 text-red-600 dark:text-red-400">⚠️</span>
+            <p className="text-sm text-red-800 dark:text-red-200 flex-1">{toastError}</p>
+            <button onClick={() => setToastError(null)} className="shrink-0 text-red-400 hover:text-red-600 font-bold cursor-pointer">&times;</button>
+          </div>
+        </div>
+      )}
       <aside className={`${sidebarOpen ? "w-64" : "w-16"} transition-all duration-300 border-r flex flex-col shrink-0 h-full overflow-y-auto`} style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
         <div className="flex items-center justify-between px-3 h-14 border-b" style={{ borderColor: "var(--border)" }}>
           {sidebarOpen && <h1 className="text-sm font-bold tracking-tight truncate" style={{ color: "var(--foreground)" }}>MYM Dashboard</h1>}
@@ -441,25 +453,69 @@ export default function App() {
           {sidebarOpen ? (
             <>
               <Button variant={uploadPhase === "done" ? "secondary" : "primary"} size="sm" className="w-full justify-center" onClick={handleSequentialUpload} disabled={uploadPhase === "uploading"}>
-                <Upload className="h-4 w-4 mr-2" />
+                {uploadPhase === "uploading" ? (
+                  <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                ) : (
+                  <Upload className="h-4 w-4 mr-2" />
+                )}
                 {uploadPhase === "waiting_sales" ? "Seleccione archivo de ventas…" :
                  uploadPhase === "waiting_stock" ? "Ahora cargue archivo de stock…" :
-                 uploadPhase === "uploading" ? "Cargando información…" :
+                 uploadPhase === "uploading" ? "Procesando…" :
                  uploadPhase === "done" ? "Archivos cargados ✓" :
                  "Cargar archivos"}
               </Button>
+              {uploadPhase === "uploading" && (
+                <div className="mt-3 w-full">
+                  <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ backgroundColor: "var(--surface-soft)" }}>
+                    <div className="h-full rounded-full bg-sky-500 animate-pulse" style={{ width: "60%" }} />
+                  </div>
+                  <p className="text-xs mt-1.5" style={{ color: "var(--muted)" }}>Procesando archivos…</p>
+                </div>
+              )}
               {uploadPhase === "done" && <p className="text-xs text-green-600 dark:text-green-400 mt-2 font-medium">✓ Archivos cargados</p>}
               {uploadPhase === "idle" && !uploaded && <p className="text-xs mt-2" style={{ color: "var(--muted)" }}>Cargue ventas + stock para comenzar</p>}
               {uploadPhase === "waiting_stock" && <p className="text-xs mt-2" style={{ color: "var(--accent)" }}>Seleccione el archivo de stock</p>}
+              {uploadError && (
+                <div className="mt-3 p-2 rounded-md text-xs flex items-start gap-2" style={{ backgroundColor: "#fee2e2", color: "#991b1b" }}>
+                  <span className="shrink-0 mt-0.5">⚠️</span>
+                  <span className="flex-1">{uploadError}</span>
+                  <button onClick={() => setUploadError(null)} className="shrink-0 font-bold hover:opacity-70 cursor-pointer">&times;</button>
+                </div>
+              )}
             </>
           ) : (
-            <Button variant={uploadPhase === "done" ? "secondary" : "primary"} size="sm" className="w-full justify-center" onClick={handleSequentialUpload} disabled={uploadPhase === "uploading"}
-              title={uploadPhase === "waiting_sales" ? "Seleccione archivo de ventas" :
-                     uploadPhase === "waiting_stock" ? "Ahora cargue archivo de stock" :
-                     uploadPhase === "uploading" ? "Cargando información" :
-                     uploadPhase === "done" ? "Archivos cargados" : "Cargar archivos"}>
-              <Upload className="h-4 w-4" />
-            </Button>
+            <>
+              <Button variant={uploadPhase === "done" ? "secondary" : "primary"} size="sm" className="w-full justify-center" onClick={handleSequentialUpload} disabled={uploadPhase === "uploading"}
+                title={uploadPhase === "waiting_sales" ? "Seleccione archivo de ventas" :
+                       uploadPhase === "waiting_stock" ? "Ahora cargue archivo de stock" :
+                       uploadPhase === "uploading" ? "Procesando" :
+                       uploadPhase === "done" ? "Archivos cargados" : "Cargar archivos"}>
+                {uploadPhase === "uploading" ? (
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+              </Button>
+              {uploadPhase === "uploading" && (
+                <div className="mt-3 flex justify-center">
+                  <svg className="animate-spin h-5 w-5" style={{ color: "var(--accent)" }} viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                </div>
+              )}
+              {uploadError && (
+                <div className="mt-2 flex justify-center">
+                  <button onClick={() => setUploadError(null)} className="text-xs" style={{ color: "#ef4444" }} title={uploadError}>⚠️</button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -942,7 +998,7 @@ export default function App() {
                         </TR>
                         <TR>
                           <TH onClick={() => toggleRepoSort("codigo")} className={repoTh("codigo", "repo-sticky-th sticky left-0 z-30 cursor-pointer select-none")}>Código<span className="sort-arrow">{repoSortArrow("codigo")}</span></TH>
-                          <TH onClick={() => toggleRepoSort("producto")} className={repoTh("descripcion", "repo-sticky-th sticky left-[90px] z-30 min-w-[240px] cursor-pointer select-none")}>Descripción<span className="sort-arrow">{repoSortArrow("producto")}</span></TH>
+                          <TH onClick={() => toggleRepoSort("producto")} className={repoTh("descripcion", "repo-sticky-th repo-sticky-edge sticky left-[90px] z-30 min-w-[240px] cursor-pointer select-none")}>Descripción<span className="sort-arrow">{repoSortArrow("producto")}</span></TH>
                           <TH onClick={() => toggleRepoSort("proveedor")} className={repoTh("proveedor", "cursor-pointer select-none")}>Proveedor<span className="sort-arrow">{repoSortArrow("proveedor")}</span></TH>
                           <TH onClick={() => toggleRepoSort("stock_actual")} className={repoTh("stock", "text-right bg-slate-500/5 cursor-pointer select-none")}>Stock actual<span className="sort-arrow">{repoSortArrow("stock_actual")}</span></TH>
                           {reposicion.semanas_cols.map(col => <TH key={col} onClick={() => toggleRepoSort(col)} className={repoTh(col, "text-right bg-cyan-500/5 cursor-pointer select-none")}>{col.replace("Venta por semana ", "")}<span className="sort-arrow">{repoSortArrow(col)}</span></TH>)}
@@ -964,7 +1020,7 @@ export default function App() {
                         {repoProductosVisibles.map(p => (
                           <TR key={p.sku} onClick={() => setRepoFilaActiva(p.sku)} onDoubleClick={() => { setRepoFilaActiva(p.sku); setRepoDrawerSku(p.sku) }} className={repoFilaActiva === p.sku ? "repo-row-active" : repoConfirmaciones[p.sku]?.confirmado ? "repo-row-confirmed" : ""}>
                             <TD className={repoTd("codigo", "repo-sticky sticky left-0 z-10 font-semibold w-[90px]")}>{p.sku}</TD>
-                            <TD className={repoTd("descripcion", "repo-sticky sticky left-[90px] z-10 min-w-[240px] max-w-[320px] truncate")}>{p.producto}</TD>
+                            <TD className={repoTd("descripcion", "repo-sticky repo-sticky-edge sticky left-[90px] z-10 min-w-[240px] max-w-[320px] truncate")}>{p.producto}</TD>
                             <TD className={repoTd("proveedor")}>{p.proveedor}</TD>
                             <TD className={repoTd("stock", "text-right")}>{p.stock_actual.toLocaleString("es-CL")}</TD>
                             {reposicion.semanas_cols.map(col => <TD key={`${p.sku}-${col}`} className={repoTd(col, "repo-week text-right")}>{(p.semanas_data[col] ?? 0).toLocaleString("es-CL")}</TD>)}
