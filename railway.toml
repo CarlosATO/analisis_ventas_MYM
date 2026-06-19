@@ -4,10 +4,15 @@ builder = "nixpacks"
 [phases.setup]
 nixPkgs = ["nodejs_20", "python312"]
 
+[phases.install]
+cmds = [
+    "cd mym_desktop/frontend && npm install",
+    "pip install -r mym_desktop/backend/requirements.txt"
+]
+
 [phases.build]
 cmds = [
-    "cd mym_desktop/frontend && npm install && npm run build",
-    "cd mym_desktop/backend && pip install -r requirements.txt"
+    "cd mym_desktop/frontend && npm run build"
 ]
 
 [deploy]
