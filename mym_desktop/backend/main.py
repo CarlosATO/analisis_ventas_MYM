@@ -855,8 +855,8 @@ def get_reposicion_filtros(analysis_id: str, exclude_commercial: bool = Query(Tr
 @app.get("/api/{analysis_id}/reposicion")
 def get_reposicion(
     analysis_id: str,
-    semanas_analisis: int = Query(4, description="Semanas a analizar (ej. 4, 8, 12, 16)"),
-    cobertura_objetivo: int = Query(4, description="Cobertura objetivo en semanas"),
+    semanas_analisis: int = Query(2, description="Semanas a analizar (ej. 2, 4, 8, 12, 16)"),
+    cobertura_objetivo: int = Query(2, description="Cobertura objetivo en semanas"),
     proveedor: str = Query("", description="Filtrar por proveedor"),
     marca: str = Query("", description="Filtrar por marca"),
     categoria: str = Query("", description="Filtrar por categoría"),
@@ -1150,8 +1150,8 @@ def _reposicion_pdf_report(df: pd.DataFrame, filtros: dict, resumen: dict) -> by
 @app.get("/api/{analysis_id}/export/reposicion")
 def export_reposicion_excel(
     analysis_id: str,
-    semanas_analisis: int = Query(4),
-    cobertura_objetivo: int = Query(4),
+    semanas_analisis: int = Query(2),
+    cobertura_objetivo: int = Query(2),
     proveedor: str = Query(""),
     marca: str = Query(""),
     categoria: str = Query(""),

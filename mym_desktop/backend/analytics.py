@@ -439,10 +439,10 @@ def calculo_reposicion(
     stock_min: float = 0, exclude_commercial: bool = True,
     incluir_sin_stock_sin_venta: bool = False
 ) -> dict:
-    if semanas_analisis not in (4, 8, 12, 16):
-        semanas_analisis = 4
-    if cobertura_objetivo not in (4, 6, 8, 12):
-        cobertura_objetivo = 4
+    if semanas_analisis not in (2, 4, 8, 12, 16):
+        semanas_analisis = 2
+    if cobertura_objetivo not in (2, 4, 6, 8, 12):
+        cobertura_objetivo = 2
 
     if exclude_commercial:
         sales = filter_commercial(sales)

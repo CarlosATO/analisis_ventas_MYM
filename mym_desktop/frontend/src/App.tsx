@@ -187,7 +187,7 @@ export default function App() {
   const [rMarca, setRMarca] = useState("")
   const [rCategoria, setRCategoria] = useState("")
   const [rSemanas, setRSemanas] = useState(4)
-  const [rCobertura, setRCobertura] = useState(4)
+  const [rCobertura, setRCobertura] = useState(2)
   const [rStockMin, setRStockMin] = useState(0)
   const [rExclude, setRExclude] = useState(true)
   const [rIncluirSinStockSinVenta, setRIncluirSinStockSinVenta] = useState(false)
@@ -925,9 +925,9 @@ export default function App() {
                     <FilterSelect label="Categoría" value={rCategoria} onChange={v => { setRCategoria(v); markRepoFiltersChanged() }}
                       options={[{ value: "", label: "Todas" }, ...(repoFiltros?.categorias ?? []).map(v => ({ value: v, label: v }))]} /></div>
                   <FilterSelect label="Semanas a analizar" value={String(rSemanas)} onChange={v => { setRSemanas(Number(v)); markRepoFiltersChanged() }}
-                    options={[4, 8, 12, 16].map(v => ({ value: String(v), label: `${v} semanas` }))} />
+                    options={[2, 4, 8, 12, 16].map(v => ({ value: String(v), label: `${v} semanas` }))} />
                   <FilterSelect label="Cobertura objetivo" title="La cobertura objetivo indica cuántas semanas se desea cubrir con inventario. Ejemplo: si el producto vende 10 unidades por semana y la cobertura objetivo es 8 semanas, el stock objetivo será 80 unidades." value={String(rCobertura)} onChange={v => { setRCobertura(Number(v)); markRepoFiltersChanged() }}
-                    options={[4, 6, 8, 12].map(v => ({ value: String(v), label: `${v} semanas` }))} />
+                    options={[2, 4, 6, 8, 12].map(v => ({ value: String(v), label: `${v} semanas` }))} />
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-medium" style={{ color: "var(--muted)" }} title="Cantidad mínima de stock que debe tener un producto para ser considerado en el sugerido. Si está en 0 no aplica filtro.">Stock mínimo</label>
                     <input type="number" min={0} value={rStockMin} onChange={e => { setRStockMin(Number(e.target.value) || 0); markRepoFiltersChanged() }}
@@ -957,6 +957,14 @@ export default function App() {
                     <Button variant="secondary" size="sm" onClick={() => downloadRepoPlan("excel")}><Download className="h-3 w-3 mr-1" />Excel</Button>
                     <Button variant="secondary" size="sm" onClick={() => downloadRepoPlan("pdf")}><Download className="h-3 w-3 mr-1" />PDF</Button>
                   </div>
+                </div>
+
+                <div className="flex flex-wrap items-end gap-3 rounded-xl border px-3 py-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                  <FilterSelect label="Semanas a analizar" value={String(rSemanas)} onChange={v => { setRSemanas(Number(v)); setRepoAvisoFiltros("Parámetros cambiados. Presione Actualizar sugerido para recalcular.") }}
+                    options={[2, 4, 8, 12, 16].map(v => ({ value: String(v), label: `${v} semanas` }))} />
+                  <FilterSelect label="Cobertura objetivo" title="La cobertura objetivo indica cuántas semanas se desea cubrir con inventario." value={String(rCobertura)} onChange={v => { setRCobertura(Number(v)); setRepoAvisoFiltros("Parámetros cambiados. Presione Actualizar sugerido para recalcular.") }}
+                    options={[2, 4, 6, 8, 12].map(v => ({ value: String(v), label: `${v} semanas` }))} />
+                  <Button size="sm" onClick={async () => { await loadReposicion() }}>Actualizar sugerido</Button>
                 </div>
 
                 {reposicion.resumen.advertencia_costo && (
@@ -1194,3 +1202,5 @@ export default function App() {
     </div>
   )
 }
+
+
