@@ -72,13 +72,17 @@ export interface ProductRow {
 export interface FiltrosActivos {
   periodo?: string
   excluir_conceptos_comerciales?: boolean
+  proveedor?: string
   categoria?: string
   marca?: string
   stock_minimo?: number
+  incluir_sin_stock_sin_venta?: boolean
   venta_minima?: number
   venta_minima_historica?: number
   dias_minimos_sin_stock?: number
   umbral_minimo_pct?: number
+  semanas_analisis?: number
+  cobertura_objetivo?: number
 }
 
 export interface HallazgosResponse {
@@ -109,6 +113,7 @@ export interface DemandaSinStockResponse {
     unidades_historicas: number
     fecha_ultima_venta: string
     dias_sin_venta: number
+    venta_potencial: number
   })[]
 }
 
@@ -159,6 +164,61 @@ export interface CaidasCrecimientoResponse {
   }
 }
 
+export interface ReposicionFiltrosResponse {
+  proveedores: string[]
+  marcas: string[]
+  categorias: string[]
+  proveedor_disponible: boolean
+  aviso_proveedor: string
+}
+
+export interface ReposicionProducto {
+  ranking: number
+  sku: string
+  producto: string
+  proveedor: string
+  marca: string
+  categoria: string
+  stock_actual: number
+  semanas_data: Record<string, number>
+  total_unidades_vendidas: number
+  promedio_semanal: number
+  cobertura_actual: number | null
+  stock_objetivo: number
+  compra_sugerida: number
+  tendencia_pct: number | null
+  estado_tendencia: string
+  estado_stock: string
+  accion_sugerida: string
+  prioridad: string
+  costo_unitario: number
+  monto_estimado: number
+}
+
+export interface ReposicionResponse {
+  filtros?: FiltrosActivos
+  proveedor_disponible: boolean
+  aviso_proveedor: string
+  resumen: {
+    proveedor_seleccionado: string
+    sku_evaluados: number
+    sku_criticos: number
+    sku_reponer: number
+    sku_completar_objetivo: number
+    unidades_sugeridas: number
+    monto_estimado_compra: number
+    has_missing_cost: boolean
+    advertencia_costo: string
+  }
+  preparacion_orden_compra: {
+    seleccion_productos_habilitada: boolean
+    campo_clave: string
+    siguiente_fase: string
+  }
+  semanas_cols: string[]
+  productos: ReposicionProducto[]
+}
+
 export interface ParetoItem {
   sku: string
   producto: string
@@ -179,6 +239,7 @@ export interface ParetoProduct {
 }
 
 export interface ParetoResponse {
+  filtros?: FiltrosActivos
   chart: ParetoItem[]
   productos: ParetoProduct[]
   total_sku: number
@@ -201,6 +262,7 @@ export interface DemandaSinStockResponse {
     unidades_historicas: number
     fecha_ultima_venta: string
     dias_sin_venta: number
+    venta_potencial: number
   })[]
 }
 

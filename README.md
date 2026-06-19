@@ -210,3 +210,7 @@ La primera versión de este proyecto fue desarrollada como prototipo en **Stream
 |---------|-------------|
 | SKU | Identificador único del producto |
 | Disponible o Stock | Cantidad disponible actual |
+
+
+.\run.bat
+

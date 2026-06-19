@@ -2,6 +2,7 @@ import type {
   UploadResponse, WeeklyResponse, WeekDetailResponse,
   HallazgosResponse, ParetoResponse, StockSinVentasResponse,
   DemandaSinStockResponse, QuiebresResponse, CaidasCrecimientoResponse,
+  ReposicionFiltrosResponse, ReposicionResponse, ReposicionProducto,
 } from "@/types"
 
 const API = "http://localhost:8000"
@@ -126,4 +127,67 @@ export async function getCaidasCrecimiento(analysisId: string, opts?: {
 
 export function getCaidasCrecimientoExportUrl(analysisId: string, tipo: string): string {
   return `${API}/api/${analysisId}/export/caidas-crecimiento/${tipo}`
+}
+
+export async function getReposicionFiltros(analysisId: string, opts?: {
+  exclude_commercial?: boolean
+}): Promise<ReposicionFiltrosResponse> {
+  const params = { exclude_commercial: opts?.exclude_commercial }
+  const res = await fetch(`${API}/api/${analysisId}/reposicion/filtros${qs(params)}`)
+  if (!res.ok) throw new Error("Error al obtener filtros de reposición")
+  return res.json()
+}
+
+export async function getReposicion(analysisId: string, opts?: {
+  semanas_analisis?: number; cobertura_objetivo?: number; proveedor?: string; marca?: string; categoria?: string; stock_minimo?: number; exclude_commercial?: boolean; incluir_sin_stock_sin_venta?: boolean
+}): Promise<ReposicionResponse> {
+  const params = {
+    semanas_analisis: opts?.semanas_analisis,
+    cobertura_objetivo: opts?.cobertura_objetivo,
+    proveedor: opts?.proveedor,
+    marca: opts?.marca,
+    categoria: opts?.categoria,
+    stock_minimo: opts?.stock_minimo,
+    exclude_commercial: opts?.exclude_commercial,
+    incluir_sin_stock_sin_venta: opts?.incluir_sin_stock_sin_venta,
+  }
+  const res = await fetch(`${API}/api/${analysisId}/reposicion${qs(params)}`)
+  if (!res.ok) throw new Error("Error al obtener reposición inteligente")
+  return res.json()
+}
+
+export function getReposicionExportUrl(analysisId: string, opts?: {
+  semanas_analisis?: number; cobertura_objetivo?: number; proveedor?: string; marca?: string; categoria?: string; stock_minimo?: number; exclude_commercial?: boolean; incluir_sin_stock_sin_venta?: boolean
+}): string {
+  const params = qs({
+    semanas_analisis: opts?.semanas_analisis,
+    cobertura_objetivo: opts?.cobertura_objetivo,
+    proveedor: opts?.proveedor,
+    marca: opts?.marca,
+    categoria: opts?.categoria,
+    stock_minimo: opts?.stock_minimo,
+    exclude_commercial: opts?.exclude_commercial,
+    incluir_sin_stock_sin_venta: opts?.incluir_sin_stock_sin_venta,
+  })
+  return `${API}/api/${analysisId}/export/reposicion${params}`
+}
+
+export async function exportReposicionConfirmados(analysisId: string, productos: (ReposicionProducto & { cantidad_confirmada: number })[]): Promise<Blob> {
+  const res = await fetch(`${API}/api/${analysisId}/export/reposicion/confirmados`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(productos),
+  })
+  if (!res.ok) throw new Error("Error al exportar productos confirmados")
+  return res.blob()
+}
+
+export async function exportReposicionPlan(analysisId: string, format: "excel" | "pdf", payload: Record<string, any>): Promise<Blob> {
+  const res = await fetch(`${API}/api/${analysisId}/export/reposicion/plan/${format}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(`Error al exportar ${format.toUpperCase()}`)
+  return res.blob()
 }

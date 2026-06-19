@@ -6,8 +6,14 @@ Reutiliza data_loader.py, analytics.py y exports.py del proyecto Streamlit.
 import io
 import uuid
 import numpy as np
+from pathlib import Path
+from datetime import datetime
+from io import BytesIO
+from fpdf import FPDF
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Body
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -17,7 +23,7 @@ from data_loader import load_files
 from analytics import (
     weekly_sales, weekly_sales_by_sku,
     build_sku_summary, classify_skus, pareto_analysis,
-    filter_commercial, EXCLUDED_SKUS,
+    filter_commercial, EXCLUDED_SKUS, calculo_reposicion, detect_supplier_column
 )
 from exports import export_to_excel
 
@@ -32,6 +38,7 @@ app.add_middleware(
 )
 
 analyses: dict[str, dict] = {}
+REPOSICION_REPORT_TITLE = "Sugerido de compras Distribuidora MYM"
 
 
 def _fmt_money(value) -> str:
@@ -787,4 +794,458 @@ def export_caidas_crecimiento_excel(analysis_id: str, tipo: str):
         io.BytesIO(excel_bytes),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={tipo}_ventas.xlsx"},
+    )
+
+
+# ── Reposición Inteligente ──
+
+@app.get("/api/{analysis_id}/reposicion/filtros")
+def get_reposicion_filtros(analysis_id: str, exclude_commercial: bool = Query(True)):
+    data = _get_data(analysis_id)
+    stock = data["stock"].copy()
+    sales = data["sales"].copy()
+    if exclude_commercial:
+        stock = filter_commercial(stock)
+        sales = filter_commercial(sales)
+
+    supplier_stock_col = detect_supplier_column(stock)
+    supplier_sales_col = detect_supplier_column(sales)
+    proveedor_disponible = supplier_stock_col is not None or supplier_sales_col is not None
+
+    if supplier_stock_col is not None and supplier_stock_col != "Proveedor":
+        stock = stock.rename(columns={supplier_stock_col: "Proveedor"})
+    elif supplier_sales_col is not None:
+        supplier_map = sales[["SKU", supplier_sales_col]].dropna(subset=[supplier_sales_col]).drop_duplicates("SKU")
+        supplier_map = supplier_map.rename(columns={supplier_sales_col: "Proveedor"})
+        stock = stock.merge(supplier_map, on="SKU", how="left")
+
+    if "Proveedor" not in stock.columns:
+        stock["Proveedor"] = "Sin Proveedor"
+    if "Marca" not in stock.columns:
+        stock["Marca"] = "Sin Marca"
+    if "Categoría" not in stock.columns:
+        stock["Categoría"] = stock["Tipo de Producto"] if "Tipo de Producto" in stock.columns else "Sin Categoría"
+
+    def _options(col: str) -> list[str]:
+        values = stock[col].fillna(f"Sin {col}").astype(str).str.strip()
+        values = values[values != ""]
+        return sorted(values.unique().tolist())
+
+    return {
+        "proveedores": _options("Proveedor"),
+        "marcas": _options("Marca"),
+        "categorias": _options("Categoría"),
+        "proveedor_disponible": proveedor_disponible,
+        "aviso_proveedor": "" if proveedor_disponible else "El archivo cargado no contiene proveedor. Para filtrar por proveedor se requiere agregar esta columna o un catálogo auxiliar.",
+    }
+
+@app.get("/api/{analysis_id}/reposicion")
+def get_reposicion(
+    analysis_id: str,
+    semanas_analisis: int = Query(4, description="Semanas a analizar (ej. 4, 8, 12, 16)"),
+    cobertura_objetivo: int = Query(4, description="Cobertura objetivo en semanas"),
+    proveedor: str = Query("", description="Filtrar por proveedor"),
+    marca: str = Query("", description="Filtrar por marca"),
+    categoria: str = Query("", description="Filtrar por categoría"),
+    stock_minimo: float = Query(0, description="Stock mínimo"),
+    exclude_commercial: bool = Query(True),
+    incluir_sin_stock_sin_venta: bool = Query(False),
+):
+    data = _get_data(analysis_id)
+    rep = calculo_reposicion(
+        data["sales"], data["stock"],
+        semanas_analisis, cobertura_objetivo,
+        proveedor, marca, categoria,
+        stock_minimo, exclude_commercial, incluir_sin_stock_sin_venta
+    )
+
+    productos = []
+    df = rep["productos"]
+    for i, (_, r) in enumerate(df.iterrows(), 1):
+        semanas_data = {col: int(r.get(col, 0)) for col in rep["semanas_cols"]}
+        
+        productos.append({
+            "ranking": i,
+            "sku": str(r.get("SKU", "")),
+            "producto": str(r.get("Producto", "")),
+            "proveedor": str(r.get("Proveedor", "")),
+            "marca": str(r.get("Marca", "")),
+            "categoria": str(r.get("Categoría", "")),
+            "stock_actual": int(r.get("Cantidad Disponible", 0)),
+            "semanas_data": semanas_data,
+            "total_unidades_vendidas": int(r.get("total_unidades_vendidas", 0)),
+            "promedio_semanal": round(float(r.get("promedio_semanal", 0)), 2),
+            "cobertura_actual": float(r["cobertura_actual"]) if pd.notna(r.get("cobertura_actual")) else None,
+            "stock_objetivo": int(r.get("stock_objetivo", 0)),
+            "compra_sugerida": int(r.get("compra_sugerida", 0)),
+            "tendencia_pct": float(r["tendencia_pct"]) if pd.notna(r.get("tendencia_pct")) else None,
+            "estado_tendencia": str(r.get("estado_tendencia", "Sin comparación")),
+            "estado_stock": str(r.get("estado_stock", "")),
+            "accion_sugerida": str(r.get("accion_sugerida", "")),
+            "prioridad": str(r.get("prioridad", "")),
+            "costo_unitario": float(r.get("Costo Neto Prom. Unitario", 0)),
+            "monto_estimado": float(r.get("monto_estimado_compra", 0))
+        })
+    
+    return {
+        "filtros": rep["filtros"],
+        "proveedor_disponible": rep["proveedor_disponible"],
+        "aviso_proveedor": rep["aviso_proveedor"],
+        "resumen": rep["resumen"],
+        "preparacion_orden_compra": rep["preparacion_orden_compra"],
+        "semanas_cols": rep["semanas_cols"],
+        "productos": productos
+    }
+
+
+def _reposicion_payload_df(payload: dict) -> tuple[pd.DataFrame, dict, dict]:
+    productos = payload.get("productos", []) or []
+    filtros = payload.get("filtros", {}) or {}
+    resumen = payload.get("resumen", {}) or {}
+    rows = []
+    for p in productos:
+        cantidad = max(0, int(p.get("cantidad_confirmada", p.get("compra_sugerida", 0)) or 0))
+        costo = float(p.get("costo_unitario", 0) or 0)
+        rows.append({
+            "Código": str(p.get("sku", "")),
+            "Descripción": str(p.get("producto", "")),
+            "Proveedor": str(p.get("proveedor", "")),
+            "Stock actual": int(p.get("stock_actual", 0) or 0),
+            **{str(k).replace("Venta por semana ", ""): int(v or 0) for k, v in (p.get("semanas_data", {}) or {}).items()},
+            "Promedio semanal": float(p.get("promedio_semanal", 0) or 0),
+            "Cobertura actual": p.get("cobertura_actual", ""),
+            "Variación reciente": p.get("tendencia_pct", ""),
+            "Estado tendencia": str(p.get("estado_tendencia", "")),
+            "Stock objetivo": int(p.get("stock_objetivo", 0) or 0),
+            "Compra sugerida": int(p.get("compra_sugerida", 0) or 0),
+            "Cantidad confirmada": cantidad,
+            "Costo unitario estimado": costo,
+            "Monto confirmado": cantidad * costo,
+            "Estado de stock": str(p.get("estado_stock", "")),
+            "Acción sugerida": str(p.get("accion_sugerida", "")),
+        })
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df["Cobertura actual"] = df["Cobertura actual"].apply(lambda x: "Sin movimiento" if x in (None, "") or pd.isna(x) else x)
+        df["Variación reciente"] = df["Variación reciente"].apply(lambda x: f"{float(x) * 100:.1f}%" if x not in (None, "") and pd.notna(x) else "")
+    return df, filtros, resumen
+
+
+def _reposicion_excel_report(df: pd.DataFrame, filtros: dict, resumen: dict) -> bytes:
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        sheet_name = "Sugerido de compras"
+        start_row = 12
+        df.to_excel(writer, index=False, sheet_name=sheet_name, startrow=start_row)
+        wb = writer.book
+        ws = writer.sheets[sheet_name]
+        title_fmt = wb.add_format({"bold": True, "font_size": 16, "font_color": "#1E3A5F"})
+        label_fmt = wb.add_format({"bold": True, "font_color": "#334155"})
+        header_fmt = wb.add_format({"bold": True, "bg_color": "#1E3A5F", "font_color": "#FFFFFF", "border": 1})
+        money_fmt = wb.add_format({"num_format": "$#,##0", "align": "right"})
+        int_fmt = wb.add_format({"num_format": "#,##0", "align": "right"})
+        num_fmt = wb.add_format({"num_format": "#,##0.0", "align": "right"})
+        ws.write(0, 0, REPOSICION_REPORT_TITLE, title_fmt)
+        ws.write(1, 0, "Fecha de generación", label_fmt)
+        ws.write(1, 1, datetime.now().strftime("%d-%m-%Y %H:%M"))
+        meta = [
+            ("Proveedor seleccionado", filtros.get("proveedor", "Todos")),
+            ("Semanas analizadas", filtros.get("semanas_analisis", "")),
+            ("Cobertura objetivo", filtros.get("cobertura_objetivo", "")),
+            ("Marca", filtros.get("marca", "Todas")),
+            ("Categoría", filtros.get("categoria", "Todas")),
+            ("Stock mínimo", filtros.get("stock_minimo", 0)),
+        ]
+        for i, (label, value) in enumerate(meta, 2):
+            ws.write(i, 0, label, label_fmt)
+            ws.write(i, 1, value)
+        resumen_items = [
+            ("SKU evaluados", resumen.get("sku_evaluados", len(df))),
+            ("SKU críticos", resumen.get("sku_criticos", 0)),
+            ("SKU a reponer", resumen.get("sku_reponer", 0)),
+            ("Unidades del reporte", int(df["Cantidad confirmada"].sum()) if "Cantidad confirmada" in df else 0),
+            ("Monto del reporte", float(df["Monto confirmado"].sum()) if "Monto confirmado" in df else 0),
+        ]
+        for i, (label, value) in enumerate(resumen_items, 2):
+            ws.write(i, 3, label, label_fmt)
+            ws.write(i, 4, value, money_fmt if "Monto" in label else int_fmt)
+        for col_num, col_name in enumerate(df.columns):
+            ws.write(start_row, col_num, str(col_name), header_fmt)
+            try:
+                max_len = max(df.iloc[:, col_num].fillna("").astype(str).map(len).max(), len(str(col_name)))
+            except Exception:
+                max_len = len(str(col_name))
+            width = min(max(max_len + 2, 12), 38)
+            fmt = money_fmt if col_name in ("Costo unitario estimado", "Monto confirmado") else int_fmt if col_name in ("Stock actual", "Stock objetivo", "Compra sugerida", "Cantidad confirmada") or str(col_name).startswith(("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre")) else num_fmt if col_name in ("Promedio semanal", "Cobertura actual") else None
+            ws.set_column(col_num, col_num, width, fmt)
+        ws.autofilter(start_row, 0, start_row, max(len(df.columns) - 1, 0))
+        ws.freeze_panes(start_row + 1, 2)
+    return output.getvalue()
+
+
+def _pdf_escape(text: str) -> str:
+    return str(text).replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+class ReposicionPDF(FPDF):
+    def header(self):
+        logo_path = BASE_DIR / "Imagen" / "logo.png"
+        if logo_path.exists():
+            self.image(str(logo_path), x=15, y=8, w=35)
+        self.set_xy(120, 10)
+        self.set_font("Helvetica", "B", 16)
+        self.set_text_color(30, 58, 95)
+        self.cell(75, 8, "SUGERIDO DE COMPRAS", align="R")
+        self.set_xy(120, 19)
+        self.set_font("Helvetica", "", 8)
+        self.set_text_color(100, 116, 139)
+        self.cell(75, 4, f"Emision: {datetime.now().strftime('%d-%m-%Y %H:%M')}", align="R")
+        self.ln(30)
+        self.set_draw_color(30, 58, 95)
+        self.set_line_width(0.6)
+        self.line(15, self.get_y(), 195, self.get_y())
+        self.ln(5)
+
+    def footer(self):
+        self.set_y(-18)
+        self.set_draw_color(200, 200, 200)
+        self.line(15, self.get_y(), 195, self.get_y())
+        self.ln(2)
+        self.set_font("Helvetica", "", 7)
+        self.set_text_color(148, 163, 184)
+        self.cell(0, 10, f"Pagina {self.page_no()}/{{nb}}  |  Sugerido de compras Distribuidora MYM", align="C")
+
+
+def _reposicion_pdf_report(df: pd.DataFrame, filtros: dict, resumen: dict) -> bytes:
+    total_neto = float(df['Monto confirmado'].sum()) if 'Monto confirmado' in df else 0
+    total_unidades = int(df['Cantidad confirmada'].sum()) if 'Cantidad confirmada' in df else 0
+
+    pdf = ReposicionPDF(orientation="P", format="A4")
+    pdf.alias_nb_pages()
+    pdf.set_auto_page_break(auto=True, margin=25)
+    pdf.add_page()
+
+    # ── Proveedor / info box ──────────────────────────
+    box_y = pdf.get_y()
+    pdf.set_draw_color(200, 200, 200)
+    pdf.set_fill_color(248, 250, 252)
+    pdf.rect(15, box_y, 180, 22, style="DF")
+    # Fila 1: PROVEEDOR (izquierda) + COBERTURA OBJ. (derecha)
+    pdf.set_xy(20, box_y + 3)
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(18, 5, "PROVEEDOR:")
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(15, 23, 42)
+    proveedor_txt = str(filtros.get("proveedor", "Todos"))
+    pdf.cell(70, 5, proveedor_txt[:40])
+    pdf.set_xy(125, box_y + 3)
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(24, 5, "COBERTURA OBJ.:")
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(22, 5, str(filtros.get("cobertura_objetivo", "")) + " sem.")
+    # Fila 2: MARCA (izquierda) + CATEGORIA (derecha)
+    pdf.set_xy(20, box_y + 10)
+    pdf.set_font("Helvetica", "", 7)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(18, 5, "MARCA:")
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(70, 5, str(filtros.get("marca", "Todas"))[:40])
+    pdf.set_xy(125, box_y + 10)
+    pdf.set_font("Helvetica", "", 7)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(24, 5, "CATEGORIA:")
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(22, 5, str(filtros.get("categoria", "Todas"))[:40])
+
+    pdf.set_y(box_y + 26)
+
+    # ── Table ─────────────────────────────────────────
+    cols = ["#", "Codigo", "Descripcion", "Cant.", "Precio Unit.", "Monto Total"]
+    col_w = [8, 22, 82, 20, 26, 28]
+    fill_header = (30, 58, 95)
+    fill_alt = (245, 247, 250)
+
+    pdf.set_font("Helvetica", "B", 7)
+    pdf.set_fill_color(*fill_header)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_draw_color(30, 58, 95)
+    for c, w in zip(cols, col_w):
+        pdf.cell(w, 7, c, border=1, fill=True, align="C")
+    pdf.ln()
+
+    pdf.set_draw_color(200, 200, 200)
+    pdf.set_font("Helvetica", "", 8)
+    for idx, (_, r) in enumerate(df.iterrows()):
+        need_break = pdf.get_y() > 248
+        if need_break:
+            pdf.add_page()
+            pdf.set_font("Helvetica", "B", 7)
+            pdf.set_fill_color(*fill_header)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_draw_color(30, 58, 95)
+            for c, w in zip(cols, col_w):
+                pdf.cell(w, 7, c, border=1, fill=True, align="C")
+            pdf.ln()
+            pdf.set_font("Helvetica", "", 8)
+            pdf.set_draw_color(200, 200, 200)
+
+        if idx % 2 == 1:
+            pdf.set_fill_color(*fill_alt)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+
+        cod = str(r.get("Código", ""))[:10]
+        desc = str(r.get("Descripción", ""))[:42]
+        cant = f"{int(r.get('Cantidad confirmada', 0) or 0):,}".replace(",", ".")
+        costo = _fmt_money(float(r.get("Costo unitario estimado", 0) or 0))
+        monto = _fmt_money(float(r.get("Monto confirmado", 0) or 0))
+
+        pdf.set_text_color(15, 23, 42)
+        pdf.cell(col_w[0], 6, str(idx + 1), border=1, fill=True, align="C")
+        pdf.cell(col_w[1], 6, cod, border=1, fill=True)
+        pdf.cell(col_w[2], 6, desc, border=1, fill=True)
+        pdf.cell(col_w[3], 6, cant, border=1, fill=True, align="R")
+        pdf.cell(col_w[4], 6, costo, border=1, fill=True, align="R")
+        pdf.cell(col_w[5], 6, monto, border=1, fill=True, align="R")
+        pdf.ln()
+
+    # ── Totals ────────────────────────────────────────
+    pdf.ln(2)
+    col_total_w = col_w[0] + col_w[1] + col_w[2] + col_w[3]
+    pdf.set_draw_color(30, 58, 95)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_fill_color(30, 58, 95)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(col_total_w, 7, "TOTAL NETO", border=1, fill=True, align="R")
+    pdf.cell(col_w[4], 7, "", border=1, fill=True, align="R")
+    pdf.cell(col_w[5], 7, _fmt_money(total_neto), border=1, fill=True, align="R")
+    pdf.ln(10)
+
+    # ── Summary line ──────────────────────────────────
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(71, 85, 105)
+    total_unidades_fmt = f"{total_unidades:,}".replace(",", ".")
+    pdf.cell(0, 5, f"Total de productos: {len(df)}  |  Total unidades: {total_unidades_fmt}  |  Monto total: {_fmt_money(total_neto)}", align="L")
+
+    return bytes(pdf.output())
+
+@app.get("/api/{analysis_id}/export/reposicion")
+def export_reposicion_excel(
+    analysis_id: str,
+    semanas_analisis: int = Query(4),
+    cobertura_objetivo: int = Query(4),
+    proveedor: str = Query(""),
+    marca: str = Query(""),
+    categoria: str = Query(""),
+    stock_minimo: float = Query(0),
+    exclude_commercial: bool = Query(True),
+    incluir_sin_stock_sin_venta: bool = Query(False),
+):
+    data = _get_data(analysis_id)
+    rep = calculo_reposicion(
+        data["sales"], data["stock"],
+        semanas_analisis, cobertura_objetivo,
+        proveedor, marca, categoria,
+        stock_minimo, exclude_commercial, incluir_sin_stock_sin_venta
+    )
+    df = rep["productos"].copy()
+    
+    cols_to_export = [
+        "SKU", "Producto", "Proveedor", "Cantidad Disponible",
+        *rep["semanas_cols"], "total_unidades_vendidas", "promedio_semanal",
+        "cobertura_actual", "stock_objetivo", "compra_sugerida", "tendencia_pct",
+        "estado_tendencia", "estado_stock", "accion_sugerida", "Costo Neto Prom. Unitario", "monto_estimado_compra"
+    ]
+    df_export = df[[c for c in cols_to_export if c in df.columns]].rename(columns={
+        "Cantidad Disponible": "Stock actual",
+        "total_unidades_vendidas": "Total unidades vendidas",
+        "promedio_semanal": "Promedio semanal",
+        "cobertura_actual": "Cobertura actual",
+        "stock_objetivo": "Stock objetivo",
+        "compra_sugerida": "Compra sugerida",
+        "tendencia_pct": "Variación reciente",
+        "estado_tendencia": "Estado tendencia",
+        "estado_stock": "Estado de stock",
+        "accion_sugerida": "Acción sugerida",
+        "Costo Neto Prom. Unitario": "Costo unitario estimado",
+        "monto_estimado_compra": "Monto estimado de compra"
+    })
+    
+    # Manejo de "Sin rotación" si es null para la vista de excel
+    df_export["Cobertura actual"] = df_export["Cobertura actual"].fillna("Sin rotación")
+    df_export["Variación reciente"] = df_export["Variación reciente"].apply(lambda x: f"{x*100:.1f}%" if pd.notna(x) else "")
+    
+    excel_bytes = _reposicion_excel_report(df_export, rep["filtros"], rep["resumen"])
+    return StreamingResponse(
+        io.BytesIO(excel_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=reposicion_inteligente.xlsx"},
+    )
+
+
+@app.post("/api/{analysis_id}/export/reposicion/confirmados")
+def export_reposicion_confirmados_excel(analysis_id: str, productos: list[dict] = Body(...)):
+    _get_data(analysis_id)
+    if not productos:
+        raise HTTPException(400, "No hay productos confirmados para exportar")
+
+    rows = []
+    for p in productos:
+        cantidad = max(0, int(p.get("cantidad_confirmada", 0) or 0))
+        costo = float(p.get("costo_unitario", 0) or 0)
+        rows.append({
+            "Código": str(p.get("sku", "")),
+            "Descripción": str(p.get("producto", "")),
+            "Proveedor": str(p.get("proveedor", "")),
+            "Stock actual": int(p.get("stock_actual", 0) or 0),
+            "Promedio semanal": float(p.get("promedio_semanal", 0) or 0),
+            "Cobertura actual": p.get("cobertura_actual", ""),
+            "Stock objetivo": int(p.get("stock_objetivo", 0) or 0),
+            "Compra sugerida": int(p.get("compra_sugerida", 0) or 0),
+            "Cantidad confirmada": cantidad,
+            "Costo unitario estimado": costo,
+            "Monto confirmado": cantidad * costo,
+            "Estado de stock": str(p.get("estado_stock", "")),
+            "Acción sugerida": str(p.get("accion_sugerida", "")),
+        })
+
+    df = pd.DataFrame(rows)
+    excel_bytes = export_to_excel(df, sheet_name="Confirmados")
+    return StreamingResponse(
+        io.BytesIO(excel_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=reposicion_confirmados.xlsx"},
+    )
+
+
+@app.post("/api/{analysis_id}/export/reposicion/plan/excel")
+def export_reposicion_plan_excel(analysis_id: str, payload: dict = Body(...)):
+    _get_data(analysis_id)
+    df, filtros, resumen = _reposicion_payload_df(payload)
+    if df.empty:
+        raise HTTPException(400, "No hay productos para exportar")
+    excel_bytes = _reposicion_excel_report(df, filtros, resumen)
+    return StreamingResponse(
+        io.BytesIO(excel_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=sugerido_compras_mym.xlsx"},
+    )
+
+
+@app.post("/api/{analysis_id}/export/reposicion/plan/pdf")
+def export_reposicion_plan_pdf(analysis_id: str, payload: dict = Body(...)):
+    _get_data(analysis_id)
+    df, filtros, resumen = _reposicion_payload_df(payload)
+    if df.empty:
+        raise HTTPException(400, "No hay productos para exportar")
+    pdf_bytes = _reposicion_pdf_report(df, filtros, resumen)
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=sugerido_compras_mym.pdf"},
     )

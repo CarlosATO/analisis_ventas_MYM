@@ -10,27 +10,216 @@
 }
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #eef3f8;
+  --foreground: #111827;
   --card: #ffffff;
-  --card-foreground: #0f172a;
-  --muted: #cbd5e1;
-  --border: #cbd5e1;
-  --accent: #0284c7;
+  --card-foreground: #111827;
+  --muted: #475569;
+  --border: #b7c2d0;
+  --accent: #075985;
+  --accent-foreground: #ffffff;
+  --surface-soft: #f8fafc;
+  --surface-strong: #e2e8f0;
+  --shadow-soft: 0 12px 30px rgba(15, 23, 42, 0.08);
 }
 
 .dark {
-  --background: #0f172a;
+  --background: #0b1220;
   --foreground: #f8fafc;
-  --card: #1e293b;
+  --card: #162033;
   --card-foreground: #f8fafc;
-  --muted: #64748b;
-  --border: #334155;
+  --muted: #cbd5e1;
+  --border: #3b4a61;
   --accent: #38bdf8;
+  --accent-foreground: #082f49;
+  --surface-soft: #101a2c;
+  --surface-strong: #223047;
+  --shadow-soft: 0 18px 40px rgba(0, 0, 0, 0.28);
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+select,
+input,
+button {
+  color-scheme: light;
+}
+
+.dark select,
+.dark input,
+.dark button {
+  color-scheme: dark;
+}
+
+.repo-table table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.repo-table th {
+  color: #f8fafc !important;
+}
+
+.repo-table th.repo-block-title {
+  background-color: #d7e0eb !important;
+  color: #0f172a !important;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.repo-table tr:nth-child(even) td {
+  background-color: #f8fafc;
+}
+
+.repo-table tr:nth-child(odd) td {
+  background-color: #ffffff;
+}
+
+.repo-table td {
+  color: #0f172a !important;
+}
+
+.repo-table td.repo-week {
+  background-color: #eaf7fb !important;
+}
+
+.repo-table td.repo-calc {
+  background-color: #f3f4ff !important;
+}
+
+.repo-table td.repo-confirm {
+  background-color: #ecfdf5 !important;
+}
+
+.repo-table tr.repo-row-active td {
+  background-color: #dbeafe !important;
+  color: #0f172a !important;
+}
+
+.repo-table tr.repo-row-confirmed td {
+  background-color: #dcfce7 !important;
+  color: #0f172a !important;
+}
+
+.repo-table .repo-sticky {
+  background-color: inherit !important;
+  box-shadow: 1px 0 0 var(--border);
+}
+
+.repo-table input {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+}
+
+.dark .repo-table tr:nth-child(even) td {
+  background-color: #111c2f;
+}
+
+.dark .repo-table tr:nth-child(odd) td {
+  background-color: #162033;
+}
+
+.dark .repo-table td {
+  color: #f8fafc !important;
+}
+
+.dark .repo-table th.repo-block-title {
+  background-color: #243247 !important;
+  color: #f8fafc !important;
+}
+
+.dark .repo-table td.repo-week {
+  background-color: #102a36 !important;
+}
+
+.dark .repo-table td.repo-calc {
+  background-color: #172039 !important;
+}
+
+.dark .repo-table td.repo-confirm {
+  background-color: #10281f !important;
+}
+
+.dark .repo-table tr.repo-row-active td {
+  background-color: #12345a !important;
+  color: #f8fafc !important;
+}
+
+.dark .repo-table tr.repo-row-confirmed td {
+  background-color: #123524 !important;
+  color: #f8fafc !important;
+}
+
+.dark .repo-table input {
+  color: #f8fafc !important;
+  background-color: #0f172a !important;
+}
+
+.repo-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.repo-table thead th {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.dark .repo-table thead th {
+  background: #162033 !important;
+  color: #f1f5f9 !important;
+}
+
+.repo-table thead th.repo-block-title {
+  background: #d1d9e6 !important;
+  color: #0f172a !important;
+}
+
+.dark .repo-table thead th.repo-block-title {
+  background: #1a2c45 !important;
+  color: #f1f5f9 !important;
+}
+
+.repo-table thead th.repo-sticky-th {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.dark .repo-table thead th.repo-sticky-th {
+  background: #0f172a !important;
+  color: #f1f5f9 !important;
+}
+
+.repo-table-wrap {
+  overflow-x: auto;
+  overflow-y: clip;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+}
+
+.repo-table th .sort-arrow {
+  font-size: 9px;
+  margin-left: 3px;
+  opacity: 0.5;
+}
+
+.repo-table th.sorted-active .sort-arrow {
+  opacity: 1;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }

@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import math
+import unicodedata
 
 # SKU de conceptos comerciales no inventariables
 # Estos SKU participan en ventas totales e indicadores financieros
@@ -397,3 +399,268 @@ def weekly_sales_by_sku(sales: pd.DataFrame, anio: int, semana: int) -> pd.DataF
         Margen=("Margen", "sum") if "Margen" in filtered.columns else ("Venta Total Bruta", "sum"),
     )
     return grp.sort_values("Venta", ascending=False)
+
+
+SUPPLIER_ALIASES = {
+    "proveedor",
+    "nombre proveedor",
+    "razon social proveedor",
+    "supplier",
+    "vendor",
+}
+
+MONTHS_ES = {
+    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
+    7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre",
+}
+
+
+def _norm_col_name(value: str) -> str:
+    text = unicodedata.normalize("NFKD", str(value).strip().lower())
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return " ".join(text.split())
+
+
+def detect_supplier_column(df: pd.DataFrame) -> str | None:
+    for col in df.columns:
+        if _norm_col_name(col) in SUPPLIER_ALIASES:
+            return col
+    return None
+
+
+def has_supplier_column(sales: pd.DataFrame, stock: pd.DataFrame) -> bool:
+    return detect_supplier_column(stock) is not None or detect_supplier_column(sales) is not None
+
+def calculo_reposicion(
+    sales: pd.DataFrame, stock: pd.DataFrame,
+    semanas_analisis: int, cobertura_objetivo: int,
+    proveedor: str = "", marca: str = "", categoria: str = "",
+    stock_min: float = 0, exclude_commercial: bool = True,
+    incluir_sin_stock_sin_venta: bool = False
+) -> dict:
+    if semanas_analisis not in (4, 8, 12, 16):
+        semanas_analisis = 4
+    if cobertura_objetivo not in (4, 6, 8, 12):
+        cobertura_objetivo = 4
+
+    if exclude_commercial:
+        sales = filter_commercial(sales)
+        stock = filter_commercial(stock)
+
+    max_date = sales["Fecha"].max()
+    min_date = sales["Fecha"].min()
+
+    max_iso = max_date.isocalendar()
+    max_week_start = pd.Timestamp.fromisocalendar(int(max_iso.year), int(max_iso.week), 1)
+    week_starts_recent_first = [max_week_start - pd.Timedelta(weeks=i) for i in range(semanas_analisis)]
+    week_starts = list(reversed(week_starts_recent_first))
+    start_date = max(week_starts[0], min_date)
+
+    sales_period = sales[(sales["Fecha"] >= start_date) & (sales["Fecha"] <= max_date)].copy()
+    iso = sales_period["Fecha"].dt.isocalendar()
+    sales_period["iso_year"] = iso.year.astype(int)
+    sales_period["iso_week"] = iso.week.astype(int)
+
+    unidades_por_sku = sales_period.groupby("SKU").agg(
+        total_unidades_vendidas=("Cantidad", "sum")
+    ).reset_index()
+
+    # Pivoteo de semanas ISO reales. Los valores son unidades vendidas, no pesos.
+    pivot = sales_period.pivot_table(
+        index="SKU", columns=["iso_year", "iso_week"], values="Cantidad", aggfunc="sum", fill_value=0
+    ).reset_index()
+
+    semanas_cols = []
+    for week_start in week_starts:
+        iso_week = week_start.isocalendar()
+        col_name = f"Venta por semana {MONTHS_ES[int(week_start.month)]} S{int(iso_week.week)}"
+        semanas_cols.append(col_name)
+        key = (int(iso_week.year), int(iso_week.week))
+        if key in pivot.columns:
+            pivot[col_name] = pivot[key]
+        else:
+            pivot[col_name] = 0
+
+    pivot.columns = [
+        "SKU" if isinstance(col, tuple) and col[0] == "SKU" else col[0] if isinstance(col, tuple) and col[0] in semanas_cols else col
+        for col in pivot.columns
+    ]
+    drop_week_cols = [c for c in pivot.columns if c != "SKU" and c not in semanas_cols]
+    if drop_week_cols:
+        pivot = pivot.drop(columns=drop_week_cols)
+
+    unidades_por_sku = unidades_por_sku.merge(pivot, on="SKU", how="left")
+    unidades_por_sku[semanas_cols] = unidades_por_sku[semanas_cols].fillna(0)
+
+    # Variación reciente: compara mitades iguales; si el período es impar, descarta la semana más antigua.
+    semanas_tendencia = (semanas_analisis // 2) * 2
+    mitad = max(1, semanas_tendencia // 2)
+    cols_anteriores = semanas_cols[:mitad]
+    cols_recientes = semanas_cols[mitad:semanas_tendencia]
+
+    unidades_por_sku["unidades_recientes"] = unidades_por_sku[cols_recientes].sum(axis=1)
+    unidades_por_sku["unidades_anteriores"] = unidades_por_sku[cols_anteriores].sum(axis=1)
+
+    unidades_por_sku["tendencia_pct"] = np.where(
+        unidades_por_sku["unidades_anteriores"] > 0,
+        (unidades_por_sku["unidades_recientes"] - unidades_por_sku["unidades_anteriores"]) / unidades_por_sku["unidades_anteriores"],
+        np.nan
+    )
+    unidades_por_sku["estado_tendencia"] = np.select(
+        [
+            unidades_por_sku["tendencia_pct"] > 0.15,
+            unidades_por_sku["tendencia_pct"] < -0.15,
+            unidades_por_sku["tendencia_pct"].notna(),
+        ],
+        ["Creciendo", "Cayendo", "Estable"],
+        default="Sin comparación"
+    )
+
+    supplier_stock_col = detect_supplier_column(stock)
+    supplier_sales_col = detect_supplier_column(sales)
+    proveedor_disponible = supplier_stock_col is not None or supplier_sales_col is not None
+    stock_cols = ["SKU", "Producto", "Marca", "Tipo de Producto", "Cantidad Disponible", "Costo Neto Prom. Unitario"]
+    if supplier_stock_col is not None:
+        stock_cols.append(supplier_stock_col)
+    existing_stock_cols = [c for c in stock_cols if c in stock.columns]
+    
+    df = stock[existing_stock_cols].drop_duplicates("SKU").copy()
+    if supplier_stock_col is not None and supplier_stock_col != "Proveedor":
+        df = df.rename(columns={supplier_stock_col: "Proveedor"})
+    elif supplier_sales_col is not None:
+        supplier_map = sales[["SKU", supplier_sales_col]].dropna(subset=[supplier_sales_col]).drop_duplicates("SKU")
+        supplier_map = supplier_map.rename(columns={supplier_sales_col: "Proveedor"})
+        df = df.merge(supplier_map, on="SKU", how="left")
+    
+    if "Categoría" not in df.columns and "Tipo de Producto" in df.columns:
+        df["Categoría"] = df["Tipo de Producto"]
+    if "Categoría" not in df.columns:
+        df["Categoría"] = "Sin Categoría"
+    
+    if "Proveedor" not in df.columns:
+        df["Proveedor"] = "Sin Proveedor"
+    if "Marca" not in df.columns:
+        df["Marca"] = "Sin Marca"
+    if "Producto" not in df.columns:
+        df["Producto"] = df["SKU"]
+    if "Costo Neto Prom. Unitario" not in df.columns:
+        df["Costo Neto Prom. Unitario"] = 0
+
+    df["Proveedor"] = df["Proveedor"].fillna("Sin Proveedor")
+    df["Marca"] = df["Marca"].fillna("Sin Marca")
+    df["Categoría"] = df["Categoría"].fillna("Sin Categoría")
+    df["Cantidad Disponible"] = pd.to_numeric(df["Cantidad Disponible"], errors="coerce").fillna(0)
+    df["Costo Neto Prom. Unitario"] = pd.to_numeric(df["Costo Neto Prom. Unitario"], errors="coerce").fillna(0)
+
+    if proveedor and proveedor != "Todos":
+        df = df[df["Proveedor"] == proveedor]
+    if marca and marca != "Todas":
+        df = df[df["Marca"] == marca]
+    if categoria and categoria != "Todas":
+        df = df[df["Categoría"] == categoria]
+    if stock_min > 0:
+        df = df[df["Cantidad Disponible"] >= stock_min]
+
+    df = df.merge(unidades_por_sku, on="SKU", how="left")
+    df["total_unidades_vendidas"] = df["total_unidades_vendidas"].fillna(0)
+    for c in semanas_cols:
+        if c not in df.columns:
+            df[c] = 0
+        else:
+            df[c] = df[c].fillna(0)
+
+    df["tendencia_pct"] = df.get("tendencia_pct", np.nan)
+    df["estado_tendencia"] = df.get("estado_tendencia", "Sin comparación")
+    df["promedio_semanal"] = df["total_unidades_vendidas"] / semanas_analisis
+    
+    df["cobertura_actual"] = np.where(
+        df["promedio_semanal"] > 0,
+        df["Cantidad Disponible"] / df["promedio_semanal"],
+        np.nan
+    )
+
+    df["stock_objetivo"] = df["promedio_semanal"] * cobertura_objetivo
+    df["stock_objetivo"] = df["stock_objetivo"].apply(lambda x: math.ceil(x))
+    
+    df["compra_sugerida"] = df["stock_objetivo"] - df["Cantidad Disponible"]
+    df["compra_sugerida"] = np.where(df["compra_sugerida"] < 0, 0, df["compra_sugerida"])
+    df["compra_sugerida"] = df["compra_sugerida"].apply(lambda x: math.ceil(x))
+
+    sin_stock_sin_movimiento = (df["Cantidad Disponible"] == 0) & (df["total_unidades_vendidas"] == 0)
+    if not incluir_sin_stock_sin_venta:
+        df = df[~sin_stock_sin_movimiento].copy()
+        sin_stock_sin_movimiento = (df["Cantidad Disponible"] == 0) & (df["total_unidades_vendidas"] == 0)
+    else:
+        df.loc[sin_stock_sin_movimiento, "compra_sugerida"] = 0
+
+    conditions = [
+        sin_stock_sin_movimiento,
+        df["promedio_semanal"] == 0,
+        df["cobertura_actual"] < 2,
+        (df["cobertura_actual"] >= 2) & (df["cobertura_actual"] < 6),
+        (df["cobertura_actual"] >= 6) & (df["compra_sugerida"] > 0),
+        (df["cobertura_actual"] >= 6) & (df["compra_sugerida"] == 0)
+    ]
+    choices = ["Sin stock / sin movimiento", "Sin movimiento", "Crítico", "Reponer", "Completar objetivo", "Stock sano"]
+    df["estado_stock"] = np.select(conditions, choices, default="Stock sano")
+    df["accion_sugerida"] = np.select(
+        conditions,
+        [
+            "Agregar manualmente solo si se desea reactivar el producto",
+            "No comprar",
+            "Comprar urgente",
+            "Incluir en próxima compra",
+            "Comprar solo si se desea llegar a cobertura objetivo",
+            "No comprar por ahora",
+        ],
+        default="No comprar por ahora"
+    )
+    df["prioridad"] = df["estado_stock"]
+
+    df["monto_estimado_compra"] = df["compra_sugerida"] * df["Costo Neto Prom. Unitario"]
+
+    prioridad_map = {"Crítico": 1, "Reponer": 2, "Completar objetivo": 3, "Stock sano": 4, "Sin movimiento": 5, "Sin stock / sin movimiento": 6}
+    df["_sort"] = df["estado_stock"].map(prioridad_map)
+    df = df.sort_values(["_sort", "compra_sugerida"], ascending=[True, False]).drop(columns=["_sort"])
+    df = df.reset_index(drop=True)
+
+    sku_evaluados = len(df)
+    sku_criticos = len(df[df["prioridad"] == "Crítico"])
+    sku_reponer = len(df[df["prioridad"] == "Reponer"])
+    sku_completar_objetivo = len(df[df["prioridad"] == "Completar objetivo"])
+    unidades_sugeridas = int(df["compra_sugerida"].sum())
+    monto_estimado = float(df["monto_estimado_compra"].sum())
+    
+    has_missing_cost = bool((df[df["compra_sugerida"] > 0]["Costo Neto Prom. Unitario"] == 0).any())
+
+    return {
+        "filtros": {
+            "proveedor": proveedor or "Todos",
+            "marca": marca or "Todas",
+            "categoria": categoria or "Todas",
+            "semanas_analisis": semanas_analisis,
+            "cobertura_objetivo": cobertura_objetivo,
+            "stock_minimo": stock_min,
+            "incluir_sin_stock_sin_venta": incluir_sin_stock_sin_venta
+        },
+        "proveedor_disponible": proveedor_disponible,
+        "aviso_proveedor": "" if proveedor_disponible else "El archivo cargado no contiene proveedor. Para filtrar por proveedor se requiere agregar esta columna o un catálogo auxiliar.",
+        "resumen": {
+            "proveedor_seleccionado": proveedor or "Todos",
+            "sku_evaluados": sku_evaluados,
+            "sku_criticos": sku_criticos,
+            "sku_reponer": sku_reponer,
+            "sku_completar_objetivo": sku_completar_objetivo,
+            "unidades_sugeridas": unidades_sugeridas,
+            "monto_estimado_compra": monto_estimado,
+            "has_missing_cost": has_missing_cost,
+            "advertencia_costo": "Algunos productos no tienen costo disponible. El monto estimado puede estar incompleto." if has_missing_cost else ""
+        },
+        "preparacion_orden_compra": {
+            "seleccion_productos_habilitada": False,
+            "campo_clave": "SKU",
+            "siguiente_fase": "Generar propuesta de Orden de Compra desde productos seleccionados"
+        },
+        "productos": df,
+        "semanas_cols": semanas_cols
+    }
