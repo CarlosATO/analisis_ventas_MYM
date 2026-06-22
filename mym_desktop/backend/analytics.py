@@ -428,21 +428,20 @@ def detect_supplier_column(df: pd.DataFrame) -> str | None:
             return col
     return None
 
-
 def has_supplier_column(sales: pd.DataFrame, stock: pd.DataFrame) -> bool:
     return detect_supplier_column(stock) is not None or detect_supplier_column(sales) is not None
 
 def calculo_reposicion(
     sales: pd.DataFrame, stock: pd.DataFrame,
-    semanas_analisis: int, cobertura_objetivo: int,
+    dias_analisis: int, cobertura_objetivo: int,
     proveedor: str = "", marca: str = "", categoria: str = "",
     stock_min: float = 0, exclude_commercial: bool = True,
     incluir_sin_stock_sin_venta: bool = False
 ) -> dict:
-    if semanas_analisis not in (2, 4, 8, 12, 16):
-        semanas_analisis = 2
-    if cobertura_objetivo not in (2, 4, 6, 8, 12):
-        cobertura_objetivo = 2
+    if dias_analisis not in (28, 56, 84, 112, 182, 365):
+        dias_analisis = 28
+    if cobertura_objetivo not in (2, 4, 6, 8, 12, 16):
+        cobertura_objetivo = 4
 
     if exclude_commercial:
         sales = filter_commercial(sales)
@@ -451,41 +450,43 @@ def calculo_reposicion(
     max_date = sales["Fecha"].max()
     min_date = sales["Fecha"].min()
 
-    max_iso = max_date.isocalendar()
-    max_week_start = pd.Timestamp.fromisocalendar(int(max_iso.year), int(max_iso.week), 1)
-    week_starts_recent_first = [max_week_start - pd.Timedelta(weeks=i) for i in range(semanas_analisis)]
-    week_starts = list(reversed(week_starts_recent_first))
-    start_date = max(week_starts[0], min_date)
+    num_bloques = dias_analisis // 7
+    
+    bloques_starts_recent_first = [max_date - pd.Timedelta(days=7*i + 6) for i in range(num_bloques)]
+    
+    bloques = []
+    for start in reversed(bloques_starts_recent_first):
+        end = start + pd.Timedelta(days=6)
+        col_name = f"{start.strftime('%d-%m')} a {end.strftime('%d-%m')}"
+        bloques.append((start, end, col_name))
+        
+    start_date = max(bloques[0][0], min_date)
 
     sales_period = sales[(sales["Fecha"] >= start_date) & (sales["Fecha"] <= max_date)].copy()
-    iso = sales_period["Fecha"].dt.isocalendar()
-    sales_period["iso_year"] = iso.year.astype(int)
-    sales_period["iso_week"] = iso.week.astype(int)
+    
+    def get_block_col(d):
+        for b_start, b_end, col in bloques:
+            if b_start <= d <= b_end:
+                return col
+        return None
+        
+    sales_period["block_col"] = sales_period["Fecha"].apply(get_block_col)
+    sales_period = sales_period.dropna(subset=["block_col"])
 
     unidades_por_sku = sales_period.groupby("SKU").agg(
         total_unidades_vendidas=("Cantidad", "sum")
     ).reset_index()
 
-    # Pivoteo de semanas ISO reales. Los valores son unidades vendidas, no pesos.
     pivot = sales_period.pivot_table(
-        index="SKU", columns=["iso_year", "iso_week"], values="Cantidad", aggfunc="sum", fill_value=0
+        index="SKU", columns="block_col", values="Cantidad", aggfunc="sum", fill_value=0
     ).reset_index()
 
-    semanas_cols = []
-    for week_start in week_starts:
-        iso_week = week_start.isocalendar()
-        col_name = f"Venta por semana {MONTHS_ES[int(week_start.month)]} S{int(iso_week.week)}"
-        semanas_cols.append(col_name)
-        key = (int(iso_week.year), int(iso_week.week))
-        if key in pivot.columns:
-            pivot[col_name] = pivot[key]
-        else:
-            pivot[col_name] = 0
+    semanas_cols = [b[2] for b in bloques]
+    
+    for col in semanas_cols:
+        if col not in pivot.columns:
+            pivot[col] = 0
 
-    pivot.columns = [
-        "SKU" if isinstance(col, tuple) and col[0] == "SKU" else col[0] if isinstance(col, tuple) and col[0] in semanas_cols else col
-        for col in pivot.columns
-    ]
     drop_week_cols = [c for c in pivot.columns if c != "SKU" and c not in semanas_cols]
     if drop_week_cols:
         pivot = pivot.drop(columns=drop_week_cols)
@@ -493,14 +494,19 @@ def calculo_reposicion(
     unidades_por_sku = unidades_por_sku.merge(pivot, on="SKU", how="left")
     unidades_por_sku[semanas_cols] = unidades_por_sku[semanas_cols].fillna(0)
 
-    # Variación reciente: compara mitades iguales; si el período es impar, descarta la semana más antigua.
-    semanas_tendencia = (semanas_analisis // 2) * 2
-    mitad = max(1, semanas_tendencia // 2)
-    cols_anteriores = semanas_cols[:mitad]
-    cols_recientes = semanas_cols[mitad:semanas_tendencia]
+    num_bloques_tendencia = (num_bloques // 2) * 2
+    mitad = max(1, num_bloques_tendencia // 2)
+    
+    cols_tendencia = semanas_cols[-num_bloques_tendencia:] if num_bloques_tendencia > 0 else []
+    cols_anteriores = cols_tendencia[:mitad]
+    cols_recientes = cols_tendencia[mitad:]
 
-    unidades_por_sku["unidades_recientes"] = unidades_por_sku[cols_recientes].sum(axis=1)
-    unidades_por_sku["unidades_anteriores"] = unidades_por_sku[cols_anteriores].sum(axis=1)
+    if cols_recientes and cols_anteriores:
+        unidades_por_sku["unidades_recientes"] = unidades_por_sku[cols_recientes].sum(axis=1)
+        unidades_por_sku["unidades_anteriores"] = unidades_por_sku[cols_anteriores].sum(axis=1)
+    else:
+        unidades_por_sku["unidades_recientes"] = 0
+        unidades_por_sku["unidades_anteriores"] = 0
 
     unidades_por_sku["tendencia_pct"] = np.where(
         unidades_por_sku["unidades_anteriores"] > 0,
@@ -572,7 +578,7 @@ def calculo_reposicion(
 
     df["tendencia_pct"] = df.get("tendencia_pct", np.nan)
     df["estado_tendencia"] = df.get("estado_tendencia", "Sin comparación")
-    df["promedio_semanal"] = df["total_unidades_vendidas"] / semanas_analisis
+    df["promedio_semanal"] = (df["total_unidades_vendidas"] / dias_analisis) * 7
     
     df["cobertura_actual"] = np.where(
         df["promedio_semanal"] > 0,
@@ -639,7 +645,7 @@ def calculo_reposicion(
             "proveedor": proveedor or "Todos",
             "marca": marca or "Todas",
             "categoria": categoria or "Todas",
-            "semanas_analisis": semanas_analisis,
+            "dias_analisis": dias_analisis,
             "cobertura_objetivo": cobertura_objetivo,
             "stock_minimo": stock_min,
             "incluir_sin_stock_sin_venta": incluir_sin_stock_sin_venta

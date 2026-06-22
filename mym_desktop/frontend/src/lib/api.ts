@@ -138,10 +138,10 @@ export async function getReposicionFiltros(analysisId: string, opts?: {
 }
 
 export async function getReposicion(analysisId: string, opts?: {
-  semanas_analisis?: number; cobertura_objetivo?: number; proveedor?: string; marca?: string; categoria?: string; stock_minimo?: number; exclude_commercial?: boolean; incluir_sin_stock_sin_venta?: boolean
+  dias_analisis?: number; cobertura_objetivo?: number; proveedor?: string; marca?: string; categoria?: string; stock_minimo?: number; exclude_commercial?: boolean; incluir_sin_stock_sin_venta?: boolean
 }): Promise<ReposicionResponse> {
   const params = {
-    semanas_analisis: opts?.semanas_analisis,
+    dias_analisis: opts?.dias_analisis,
     cobertura_objetivo: opts?.cobertura_objetivo,
     proveedor: opts?.proveedor,
     marca: opts?.marca,
@@ -155,10 +155,10 @@ export async function getReposicion(analysisId: string, opts?: {
 }
 
 export function getReposicionExportUrl(analysisId: string, opts?: {
-  semanas_analisis?: number; cobertura_objetivo?: number; proveedor?: string; marca?: string; categoria?: string; stock_minimo?: number; exclude_commercial?: boolean; incluir_sin_stock_sin_venta?: boolean
+  dias_analisis?: number; cobertura_objetivo?: number; proveedor?: string; marca?: string; categoria?: string; stock_minimo?: number; exclude_commercial?: boolean; incluir_sin_stock_sin_venta?: boolean
 }): string {
   const params = qs({
-    semanas_analisis: opts?.semanas_analisis,
+    dias_analisis: opts?.dias_analisis,
     cobertura_objetivo: opts?.cobertura_objetivo,
     proveedor: opts?.proveedor,
     marca: opts?.marca,

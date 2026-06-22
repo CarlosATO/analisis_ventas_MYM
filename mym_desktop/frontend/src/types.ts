@@ -81,7 +81,7 @@ export interface FiltrosActivos {
   venta_minima_historica?: number
   dias_minimos_sin_stock?: number
   umbral_minimo_pct?: number
-  semanas_analisis?: number
+  dias_analisis?: number
   cobertura_objetivo?: number
 }
 

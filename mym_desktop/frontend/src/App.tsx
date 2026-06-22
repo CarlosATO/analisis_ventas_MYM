@@ -36,7 +36,7 @@ function FiltrosDisplay({ filtros, count }: { filtros?: FiltrosActivos; count?: 
       <FilterBadge label="Proveedor" value={filtros.proveedor && filtros.proveedor !== "Todos" ? filtros.proveedor : undefined} />
       <FilterBadge label="Categoría" value={filtros.categoria && filtros.categoria !== "Todas" ? filtros.categoria : undefined} />
       <FilterBadge label="Marca" value={filtros.marca && filtros.marca !== "Todas" ? filtros.marca : undefined} />
-      <FilterBadge label="Semanas" value={filtros.semanas_analisis} />
+      <FilterBadge label="Días" value={filtros.dias_analisis} />
       <FilterBadge label="Cobertura objetivo" value={filtros.cobertura_objetivo ? `${filtros.cobertura_objetivo} semanas` : undefined} />
       <FilterBadge label="Stock mín" value={filtros.stock_minimo && filtros.stock_minimo > 0 ? filtros.stock_minimo : undefined} />
       <FilterBadge label="Sin stock/sin venta" value={filtros.incluir_sin_stock_sin_venta} />
@@ -186,7 +186,7 @@ export default function App() {
   const [rProveedor] = useState("")
   const [rMarca] = useState("")
   const [rCategoria] = useState("")
-  const [rSemanas, setRSemanas] = useState(4)
+  const [rDias, setRDias] = useState(4)
   const [rCobertura, setRCobertura] = useState(2)
   const [rStockMin, setRStockMin] = useState(0)
   const [rExclude, setRExclude] = useState(true)
@@ -251,7 +251,7 @@ export default function App() {
     setRepoFiltros(await getReposicionFiltros(analysisId, { exclude_commercial: rExclude }))
   }, [analysisId, rExclude])
 
-  const repoOpts = { semanas_analisis: rSemanas, cobertura_objetivo: rCobertura, proveedor: rProveedor, marca: rMarca, categoria: rCategoria, stock_minimo: rStockMin || undefined, exclude_commercial: rExclude, incluir_sin_stock_sin_venta: rIncluirSinStockSinVenta }
+  const repoOpts = { dias_analisis: rDias, cobertura_objetivo: rCobertura, proveedor: rProveedor, marca: rMarca, categoria: rCategoria, stock_minimo: rStockMin || undefined, exclude_commercial: rExclude, incluir_sin_stock_sin_venta: rIncluirSinStockSinVenta }
 
   const markRepoFiltersChanged = () => {
     setReposicion(null)
@@ -261,19 +261,27 @@ export default function App() {
     setRepoAvisoFiltros("Los filtros cambiaron. Revise nuevamente el sugerido antes de confirmar.")
   }
 
-  const loadReposicion = useCallback(async () => {
+  const loadReposicion = useCallback(async (isFilterUpdate = false) => {
     if (!analysisId) return
     const res = await getReposicion(analysisId, repoOpts)
     setReposicion(res)
     setRepoConfirmaciones(prev => {
       const next: Record<string, { cantidad: number; confirmado: boolean }> = {}
       for (const p of res.productos) {
-        next[p.sku] = prev[p.sku] ?? { cantidad: p.compra_sugerida, confirmado: false }
+        if (isFilterUpdate) {
+          next[p.sku] = { cantidad: p.compra_sugerida, confirmado: false }
+        } else {
+          next[p.sku] = prev[p.sku] ?? { cantidad: p.compra_sugerida, confirmado: false }
+        }
       }
       return next
     })
-    setRepoAvisoFiltros("")
-  }, [analysisId, rSemanas, rCobertura, rProveedor, rMarca, rCategoria, rStockMin, rExclude, rIncluirSinStockSinVenta])
+    if (isFilterUpdate) {
+      setRepoAvisoFiltros("Los filtros cambiaron. Se recalculó el sugerido y se limpiaron las confirmaciones previas.")
+    } else {
+      setRepoAvisoFiltros("")
+    }
+  }, [analysisId, rDias, rCobertura, rProveedor, rMarca, rCategoria, rStockMin, rExclude, rIncluirSinStockSinVenta])
 
   const setRepoCantidad = (sku: string, value: string) => {
     const cantidad = Math.max(0, Math.floor(Number(value) || 0))
@@ -399,34 +407,36 @@ export default function App() {
   ]
 
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [uploadPhase, setUploadPhase] = useState<"idle" | "waiting_sales" | "waiting_stock" | "uploading" | "done">("idle")
+  const [uploadPhase, setUploadPhase] = useState<"idle" | "uploading" | "done">("idle")
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [salesFile, setSalesFile] = useState<File | null>(null)
+  const [stockFile, setStockFile] = useState<File | null>(null)
+  const [filesChanged, setFilesChanged] = useState(false)
   const salesInputRef = useRef<HTMLInputElement>(null)
   const stockInputRef = useRef<HTMLInputElement>(null)
-  const pendingSalesFile = useRef<File | null>(null)
-
-  const handleSequentialUpload = () => {
-    setUploadPhase("waiting_sales")
-    salesInputRef.current?.click()
-  }
 
   const onSalesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) { setUploadPhase("idle"); return }
-    pendingSalesFile.current = file
-    setUploadPhase("waiting_stock")
-    setTimeout(() => stockInputRef.current?.click(), 100)
+    const file = e.target.files?.[0] || null
+    if (file) {
+      setSalesFile(file)
+      if (uploaded) setFilesChanged(true)
+    }
   }
 
-  const onStockSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) { setUploadPhase("idle"); return }
-    const salesFileVal = pendingSalesFile.current
-    if (!salesFileVal) { setUploadPhase("idle"); return }
+  const onStockSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null
+    if (file) {
+      setStockFile(file)
+      if (uploaded) setFilesChanged(true)
+    }
+  }
+
+  const handleCargarDatos = async () => {
+    if (!salesFile || !stockFile) return
     setUploadError(null)
     setUploadPhase("uploading")
     try {
-      const res = await uploadFiles(salesFileVal, file)
+      const res = await uploadFiles(salesFile, stockFile)
       setUploaded(res)
       setAnalysisId(res.analysis_id)
       setReposicion(null)
@@ -436,6 +446,7 @@ export default function App() {
       const weekly = await getWeekly(res.analysis_id)
       setWeeklyData(weekly.weeks.filter(w => w.venta >= 0))
       setUploadPhase("done")
+      setFilesChanged(false)
       setTab("reposicion")
     } catch (err: any) { setUploadError(err.message ?? "Error al procesar los archivos. Intente nuevamente."); setUploadPhase("idle") }
   }
@@ -461,71 +472,71 @@ export default function App() {
           <input ref={salesInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={onSalesSelected} />
           <input ref={stockInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={onStockSelected} />
           {sidebarOpen ? (
-            <>
-              <Button variant={uploadPhase === "done" ? "secondary" : "primary"} size="sm" className="w-full justify-center" onClick={handleSequentialUpload} disabled={uploadPhase === "uploading"}>
+            <div className="space-y-3">
+              {/* Bloque Ventas */}
+              <div className="rounded-lg border p-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-soft)" }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <ShoppingCart className="h-4 w-4" style={{ color: "var(--accent)" }} />
+                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--muted)" }}>Archivo de Ventas</span>
+                </div>
+                <Button variant="secondary" size="sm" className="w-full justify-center mb-2" onClick={() => salesInputRef.current?.click()}>
+                  Seleccionar archivo
+                </Button>
+                <div className="text-xs truncate" style={{ color: salesFile ? "var(--foreground)" : "var(--muted)" }}>
+                  {salesFile ? `📄 ${salesFile.name}` : "No seleccionado"}
+                </div>
+              </div>
+
+              {/* Bloque Stock */}
+              <div className="rounded-lg border p-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-soft)" }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Package className="h-4 w-4" style={{ color: "var(--accent)" }} />
+                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--muted)" }}>Archivo de Stock</span>
+                </div>
+                <Button variant="secondary" size="sm" className="w-full justify-center mb-2" onClick={() => stockInputRef.current?.click()}>
+                  Seleccionar archivo
+                </Button>
+                <div className="text-xs truncate" style={{ color: stockFile ? "var(--foreground)" : "var(--muted)" }}>
+                  {stockFile ? `📄 ${stockFile.name}` : "No seleccionado"}
+                </div>
+              </div>
+
+              <Button variant="primary" size="sm" className="w-full justify-center mt-2" onClick={handleCargarDatos} disabled={!salesFile || !stockFile || uploadPhase === "uploading"}>
                 {uploadPhase === "uploading" ? (
                   <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                ) : (
-                  <Upload className="h-4 w-4 mr-2" />
-                )}
-                {uploadPhase === "waiting_sales" ? "Seleccione archivo de ventas…" :
-                 uploadPhase === "waiting_stock" ? "Ahora cargue archivo de stock…" :
-                 uploadPhase === "uploading" ? "Procesando…" :
-                 uploadPhase === "done" ? "Archivos cargados ✓" :
-                 "Cargar archivos"}
+                ) : <Upload className="h-4 w-4 mr-2" />}
+                {uploadPhase === "uploading" ? "Procesando..." : "Cargar datos"}
               </Button>
-              {uploadPhase === "uploading" && (
-                <div className="mt-3 w-full">
-                  <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ backgroundColor: "var(--surface-soft)" }}>
-                    <div className="h-full rounded-full bg-sky-500 animate-pulse" style={{ width: "60%" }} />
-                  </div>
-                  <p className="text-xs mt-1.5" style={{ color: "var(--muted)" }}>Procesando archivos…</p>
+
+              {filesChanged && uploaded && (
+                <div className="p-2 rounded-md border text-xs" style={{ borderColor: "#f59e0b", backgroundColor: "#fef3c7", color: "#92400e" }}>
+                  Los archivos seleccionados cambiaron. Presione Cargar datos para actualizar el análisis.
                 </div>
               )}
-              {uploadPhase === "done" && <p className="text-xs text-green-600 dark:text-green-400 mt-2 font-medium">✓ Archivos cargados</p>}
-              {uploadPhase === "idle" && !uploaded && <p className="text-xs mt-2" style={{ color: "var(--muted)" }}>Cargue ventas + stock para comenzar</p>}
-              {uploadPhase === "waiting_stock" && <p className="text-xs mt-2" style={{ color: "var(--accent)" }}>Seleccione el archivo de stock</p>}
+
+              {uploadPhase === "done" && !filesChanged && <p className="text-xs text-green-600 dark:text-green-400 mt-2 font-medium">✔️ Archivos cargados</p>}
+              
               {uploadError && (
-                <div className="mt-3 p-2 rounded-md text-xs flex items-start gap-2" style={{ backgroundColor: "#fee2e2", color: "#991b1b" }}>
+                <div className="p-2 rounded-md border text-xs flex items-start gap-2" style={{ borderColor: "#ef4444", backgroundColor: "#fee2e2", color: "#991b1b" }}>
                   <span className="shrink-0 mt-0.5">⚠️</span>
                   <span className="flex-1">{uploadError}</span>
                   <button onClick={() => setUploadError(null)} className="shrink-0 font-bold hover:opacity-70 cursor-pointer">&times;</button>
                 </div>
               )}
-            </>
+            </div>
           ) : (
-            <>
-              <Button variant={uploadPhase === "done" ? "secondary" : "primary"} size="sm" className="w-full justify-center" onClick={handleSequentialUpload} disabled={uploadPhase === "uploading"}
-                title={uploadPhase === "waiting_sales" ? "Seleccione archivo de ventas" :
-                       uploadPhase === "waiting_stock" ? "Ahora cargue archivo de stock" :
-                       uploadPhase === "uploading" ? "Procesando" :
-                       uploadPhase === "done" ? "Archivos cargados" : "Cargar archivos"}>
-                {uploadPhase === "uploading" ? (
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                ) : (
-                  <Upload className="h-4 w-4" />
-                )}
-              </Button>
-              {uploadPhase === "uploading" && (
-                <div className="mt-3 flex justify-center">
-                  <svg className="animate-spin h-5 w-5" style={{ color: "var(--accent)" }} viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                </div>
-              )}
-              {uploadError && (
-                <div className="mt-2 flex justify-center">
-                  <button onClick={() => setUploadError(null)} className="text-xs" style={{ color: "#ef4444" }} title={uploadError}>⚠️</button>
-                </div>
-              )}
-            </>
+            <Button variant={uploadPhase === "done" && !filesChanged ? "secondary" : "primary"} size="sm" className="w-full justify-center" onClick={() => setSidebarOpen(true)} disabled={uploadPhase === "uploading"}
+                title="Abrir para cargar archivos">
+              {uploadPhase === "uploading" ? (
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              ) : <Upload className="h-4 w-4" />}
+            </Button>
           )}
         </div>
 
@@ -915,10 +926,10 @@ export default function App() {
             {!reposicion && (
               <Card>
                 <div className="flex flex-wrap items-end gap-4">
-                  <FilterSelect label="Semanas a analizar" value={String(rSemanas)} onChange={v => { setRSemanas(Number(v)); markRepoFiltersChanged() }}
-                    options={[2, 4, 8, 12, 16].map(v => ({ value: String(v), label: `${v} semanas` }))} />
+                  <FilterSelect label="Período a analizar" value={String(rDias)} onChange={v => { setRDias(Number(v)); markRepoFiltersChanged() }}
+                    options={[28, 56, 84, 112, 182, 365].map(v => ({ value: String(v), label: `${v} días` }))} />
                   <FilterSelect label="Cobertura objetivo" title="La cobertura objetivo indica cuántas semanas se desea cubrir con inventario. Ejemplo: si el producto vende 10 unidades por semana y la cobertura objetivo es 8 semanas, el stock objetivo será 80 unidades." value={String(rCobertura)} onChange={v => { setRCobertura(Number(v)); markRepoFiltersChanged() }}
-                    options={[2, 4, 6, 8, 12].map(v => ({ value: String(v), label: `${v} semanas` }))} />
+                    options={[4, 8, 12, 16].map(v => ({ value: String(v), label: `${v} semanas` }))} />
                   <FilterCheckbox label="Incluir sin stock/venta" checked={rIncluirSinStockSinVenta} onChange={v => { setRIncluirSinStockSinVenta(v); markRepoFiltersChanged() }} />
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-medium" style={{ color: "var(--muted)" }} title="Cantidad mínima de stock que debe tener un producto para ser considerado en el sugerido. Si está en 0 no aplica filtro.">Stock mínimo</label>
@@ -926,7 +937,7 @@ export default function App() {
                       className="text-sm rounded-md border px-2 py-1.5 w-20" style={{ borderColor: "var(--border)", backgroundColor: "var(--background)", color: "var(--foreground)" }} />
                   </div>
                   <FilterCheckbox label="Excluir comerciales" checked={rExclude} onChange={v => { setRExclude(v); setRepoFiltros(null); markRepoFiltersChanged() }} />
-                  <Button size="sm" onClick={async () => { await loadReposicionFiltros(); await loadReposicion() }}>Obtener sugerido</Button>
+                  <Button size="sm" onClick={async () => { await loadReposicionFiltros(); await loadReposicion(true) }}>Obtener sugerido</Button>
                 </div>
               </Card>
             )}
@@ -941,7 +952,7 @@ export default function App() {
                     <div><span className="font-medium" style={{ color: "var(--muted)" }}>Stock </span><strong style={{ color: "var(--foreground)" }}>{uploaded!.diagnostics.stock_rows.toLocaleString()}</strong></div>
                     <div><span className="font-medium" style={{ color: "var(--muted)" }}>SKU </span><strong style={{ color: "var(--foreground)" }}>{uploaded!.cross_metrics.skus_sold.toLocaleString()}</strong></div>
                     <div><span className="font-medium" style={{ color: "var(--muted)" }}>Proveedor </span><strong style={{ color: "var(--foreground)" }}>{reposicion.resumen.proveedor_seleccionado}</strong></div>
-                    <div><span className="font-medium" style={{ color: "var(--muted)" }}>Semanas </span><strong style={{ color: "var(--foreground)" }}>{reposicion.filtros?.semanas_analisis}</strong></div>
+                    <div><span className="font-medium" style={{ color: "var(--muted)" }}>Días </span><strong style={{ color: "var(--foreground)" }}>{reposicion.filtros?.dias_analisis}</strong></div>
                     <div><span className="font-medium" style={{ color: "var(--muted)" }}>Cobertura obj. </span><strong style={{ color: "var(--foreground)" }}>{reposicion.filtros?.cobertura_objetivo}</strong></div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 ml-auto">
@@ -951,12 +962,12 @@ export default function App() {
                 </div>
 
                 <div className="flex flex-wrap items-end gap-3 rounded-xl border px-3 py-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
-                  <FilterSelect label="Semanas a analizar" value={String(rSemanas)} onChange={v => { setRSemanas(Number(v)); setRepoAvisoFiltros("Parámetros cambiados. Presione Actualizar sugerido para recalcular.") }}
-                    options={[2, 4, 8, 12, 16].map(v => ({ value: String(v), label: `${v} semanas` }))} />
+                  <FilterSelect label="Período a analizar" value={String(rDias)} onChange={v => { setRDias(Number(v)); setRepoAvisoFiltros("Parámetros cambiados. Presione Actualizar sugerido para recalcular.") }}
+                    options={[28, 56, 84, 112, 182, 365].map(v => ({ value: String(v), label: `${v} días` }))} />
                   <FilterSelect label="Cobertura objetivo" title="La cobertura objetivo indica cuántas semanas se desea cubrir con inventario." value={String(rCobertura)} onChange={v => { setRCobertura(Number(v)); setRepoAvisoFiltros("Parámetros cambiados. Presione Actualizar sugerido para recalcular.") }}
-                    options={[2, 4, 6, 8, 12].map(v => ({ value: String(v), label: `${v} semanas` }))} />
+                    options={[4, 8, 12, 16].map(v => ({ value: String(v), label: `${v} semanas` }))} />
                   <FilterCheckbox label="Incluir sin stock/venta" checked={rIncluirSinStockSinVenta} onChange={v => { setRIncluirSinStockSinVenta(v); setRepoAvisoFiltros("Parámetros cambiados. Presione Actualizar sugerido para recalcular.") }} />
-                  <Button size="sm" onClick={async () => { await loadReposicion() }}>Actualizar sugerido</Button>
+                  <Button size="sm" onClick={async () => { await loadReposicion(true) }}>Actualizar sugerido</Button>
                 </div>
 
                 {reposicion.resumen.advertencia_costo && (
@@ -1020,7 +1031,7 @@ export default function App() {
                         <TR>
                           <TH className={repoBlockHeader} colSpan={3}>Producto</TH>
                           <TH className={repoBlockHeader} colSpan={1}>Stock</TH>
-                          <TH className={repoBlockHeader} colSpan={reposicion.semanas_cols.length}>Unidades vendidas por semana</TH>
+                          <TH className={repoBlockHeader} colSpan={reposicion.semanas_cols.length}>UNIDADES VENDIDAS CADA 7 DÍAS</TH>
                           <TH className={repoBlockHeader} colSpan={4}>Confirmación de compra</TH>
                           <TH className={repoBlockHeader} colSpan={6}>Cálculo sugerido</TH>
                           <TH className={repoBlockHeader} colSpan={2}>Gestión</TH>
@@ -1116,7 +1127,7 @@ export default function App() {
                         </section>
 
                         <section className="rounded-xl border bg-white p-4 shadow-sm dark:bg-[#111827]" style={{ borderColor: "var(--border)" }}>
-                          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900 dark:text-white">Unidades vendidas por semana</h3>
+                          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900 dark:text-white">UNIDADES VENDIDAS CADA 7 DÍAS</h3>
                           <div className="mt-3 overflow-hidden rounded-lg border" style={{ borderColor: "var(--border)" }}>
                             <table className="w-full text-sm">
                               <tbody>

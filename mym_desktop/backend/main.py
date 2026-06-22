@@ -855,8 +855,8 @@ def get_reposicion_filtros(analysis_id: str, exclude_commercial: bool = Query(Tr
 @app.get("/api/{analysis_id}/reposicion")
 def get_reposicion(
     analysis_id: str,
-    semanas_analisis: int = Query(2, description="Semanas a analizar (ej. 2, 4, 8, 12, 16)"),
-    cobertura_objetivo: int = Query(2, description="Cobertura objetivo en semanas"),
+    dias_analisis: int = Query(28, description="Días a analizar (ej. 28, 56, 84, 112, 182, 365)"),
+    cobertura_objetivo: int = Query(4, description="Cobertura objetivo en semanas"),
     proveedor: str = Query("", description="Filtrar por proveedor"),
     marca: str = Query("", description="Filtrar por marca"),
     categoria: str = Query("", description="Filtrar por categoría"),
@@ -867,7 +867,7 @@ def get_reposicion(
     data = _get_data(analysis_id)
     rep = calculo_reposicion(
         data["sales"], data["stock"],
-        semanas_analisis, cobertura_objetivo,
+        dias_analisis, cobertura_objetivo,
         proveedor, marca, categoria,
         stock_minimo, exclude_commercial, incluir_sin_stock_sin_venta
     )
@@ -924,7 +924,7 @@ def _reposicion_payload_df(payload: dict) -> tuple[pd.DataFrame, dict, dict]:
             "Descripción": str(p.get("producto", "")),
             "Proveedor": str(p.get("proveedor", "")),
             "Stock actual": int(p.get("stock_actual", 0) or 0),
-            **{str(k).replace("Venta por semana ", ""): int(v or 0) for k, v in (p.get("semanas_data", {}) or {}).items()},
+            **{str(k): int(v or 0) for k, v in (p.get("semanas_data", {}) or {}).items()},
             "Promedio semanal": float(p.get("promedio_semanal", 0) or 0),
             "Cobertura actual": p.get("cobertura_actual", ""),
             "Variación reciente": p.get("tendencia_pct", ""),
@@ -963,7 +963,7 @@ def _reposicion_excel_report(df: pd.DataFrame, filtros: dict, resumen: dict) -> 
         ws.write(1, 1, datetime.now().strftime("%d-%m-%Y %H:%M"))
         meta = [
             ("Proveedor seleccionado", filtros.get("proveedor", "Todos")),
-            ("Semanas analizadas", filtros.get("semanas_analisis", "")),
+            ("Período a analizar", f'{filtros.get("dias_analisis", "")} días'),
             ("Cobertura objetivo", filtros.get("cobertura_objetivo", "")),
             ("Marca", filtros.get("marca", "Todas")),
             ("Categoría", filtros.get("categoria", "Todas")),
@@ -989,7 +989,7 @@ def _reposicion_excel_report(df: pd.DataFrame, filtros: dict, resumen: dict) -> 
             except Exception:
                 max_len = len(str(col_name))
             width = min(max(max_len + 2, 12), 38)
-            fmt = money_fmt if col_name in ("Costo unitario estimado", "Monto confirmado") else int_fmt if col_name in ("Stock actual", "Stock objetivo", "Compra sugerida", "Cantidad confirmada") or str(col_name).startswith(("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre")) else num_fmt if col_name in ("Promedio semanal", "Cobertura actual") else None
+            fmt = money_fmt if col_name in ("Costo unitario estimado", "Monto confirmado") else int_fmt if col_name in ("Stock actual", "Stock objetivo", "Compra sugerida", "Cantidad confirmada") or (" a " in str(col_name)) else num_fmt if col_name in ("Promedio semanal", "Cobertura actual") else None
             ws.set_column(col_num, col_num, width, fmt)
         ws.autofilter(start_row, 0, start_row, max(len(df.columns) - 1, 0))
         ws.freeze_panes(start_row + 1, 2)
@@ -1042,7 +1042,7 @@ def _reposicion_pdf_report(df: pd.DataFrame, filtros: dict, resumen: dict) -> by
     box_y = pdf.get_y()
     pdf.set_draw_color(200, 200, 200)
     pdf.set_fill_color(248, 250, 252)
-    pdf.rect(15, box_y, 180, 22, style="DF")
+    pdf.rect(15, box_y, 180, 29, style="DF")
     # Fila 1: PROVEEDOR (izquierda) + COBERTURA OBJ. (derecha)
     pdf.set_xy(20, box_y + 3)
     pdf.set_font("Helvetica", "B", 8)
@@ -1074,8 +1074,16 @@ def _reposicion_pdf_report(df: pd.DataFrame, filtros: dict, resumen: dict) -> by
     pdf.set_font("Helvetica", "B", 8)
     pdf.set_text_color(15, 23, 42)
     pdf.cell(22, 5, str(filtros.get("categoria", "Todas"))[:40])
+    # Fila 3: PERIODO (izquierda)
+    pdf.set_xy(20, box_y + 17)
+    pdf.set_font("Helvetica", "", 7)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(18, 5, "PERIODO:")
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(70, 5, f'{filtros.get("dias_analisis", "")} días')
 
-    pdf.set_y(box_y + 26)
+    pdf.set_y(box_y + 33)
 
     # ── Table ─────────────────────────────────────────
     cols = ["#", "Codigo", "Descripcion", "Cant.", "Precio Unit.", "Monto Total"]
@@ -1150,8 +1158,8 @@ def _reposicion_pdf_report(df: pd.DataFrame, filtros: dict, resumen: dict) -> by
 @app.get("/api/{analysis_id}/export/reposicion")
 def export_reposicion_excel(
     analysis_id: str,
-    semanas_analisis: int = Query(2),
-    cobertura_objetivo: int = Query(2),
+    dias_analisis: int = Query(28),
+    cobertura_objetivo: int = Query(4),
     proveedor: str = Query(""),
     marca: str = Query(""),
     categoria: str = Query(""),
@@ -1162,7 +1170,7 @@ def export_reposicion_excel(
     data = _get_data(analysis_id)
     rep = calculo_reposicion(
         data["sales"], data["stock"],
-        semanas_analisis, cobertura_objetivo,
+        dias_analisis, cobertura_objetivo,
         proveedor, marca, categoria,
         stock_minimo, exclude_commercial, incluir_sin_stock_sin_venta
     )
