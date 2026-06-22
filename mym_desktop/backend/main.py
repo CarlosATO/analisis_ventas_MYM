@@ -58,6 +58,33 @@ def _get_data(analysis_id: str):
         raise HTTPException(404, "Análisis no encontrado")
     return data
 
+def _parse_dates(data, start_date: str, end_date: str):
+    max_date = data["max_date"]
+    min_date = data["min_date"]
+    import pandas as pd
+    
+    if not start_date:
+        h_start = min_date
+    else:
+        h_start = pd.to_datetime(start_date, errors="coerce", dayfirst=False)
+        if pd.isna(h_start):
+            raise HTTPException(400, "Formato de fecha inválido. Use YYYY-MM-DD.")
+            
+    if not end_date:
+        h_end = max_date
+    else:
+        h_end = pd.to_datetime(end_date, errors="coerce", dayfirst=False)
+        if pd.isna(h_end):
+            raise HTTPException(400, "Formato de fecha inválido. Use YYYY-MM-DD.")
+
+    h_start = max(h_start, min_date)
+    h_end = min(h_end, max_date)
+    
+    if h_start > h_end:
+        h_start, h_end = h_end, h_start
+        
+    return h_start, h_end
+
 
 def _sku_rows(sku_df: pd.DataFrame, stock: pd.DataFrame, sort_col: str, ascending: bool, top: int = 0):
     df = sku_df.copy()
@@ -148,8 +175,8 @@ async def upload_files(
             },
             "cross_metrics": cross_metrics,
             "date_range": {
-                "min": min_date.strftime("%d-%m-%Y"),
-                "max": max_date.strftime("%d-%m-%Y"),
+                "min": min_date.strftime("%Y-%m-%d"),
+                "max": max_date.strftime("%Y-%m-%d"),
             },
             "status": "ok",
         }
@@ -249,26 +276,15 @@ def export_weekly_excel(analysis_id: str, year: int, week: int):
 # ── Hallazgos ──
 
 def _build_hallazgos(
-    analysis_id: str, period: str,
+    analysis_id: str, start_date: str = "", end_date: str = "",
     exclude_commercial: bool = True,
     categoria: str = "", marca: str = "",
     stock_min: float = 0, venta_min: float = 0,
 ):
     data = _get_data(analysis_id)
-    max_date = data["max_date"]
-    min_date = data["min_date"]
+    h_start, h_end = _parse_dates(data, start_date, end_date)
 
-    offsets = {
-        "Últimas 4 semanas": pd.Timedelta(weeks=4),
-        "Últimas 8 semanas": pd.Timedelta(weeks=8),
-        "Últimas 12 semanas": pd.Timedelta(weeks=12),
-    }
-    h_start = max_date - offsets.get(period, pd.Timedelta(0))
-    if period in ("Todo el período", "Historial completo"):
-        h_start = min_date
-    h_start = max(h_start, min_date)
-
-    sku = classify_skus(build_sku_summary(data["sales"], data["stock"], h_start, max_date))
+    sku = classify_skus(build_sku_summary(data["sales"], data["stock"], h_start, h_end))
     if exclude_commercial:
         sku = filter_commercial(sku)
     if categoria and categoria != "Todas":
@@ -303,7 +319,7 @@ def _build_hallazgos(
 
     return {
         "filtros": {
-            "periodo": period,
+            "start_date": start_date, "end_date": end_date,
             "excluir_conceptos_comerciales": exclude_commercial,
             "categoria": categoria or "Todas",
             "marca": marca or "Todas",
@@ -348,18 +364,18 @@ def _build_hallazgos(
 @app.get("/api/{analysis_id}/hallazgos")
 def get_hallazgos(
     analysis_id: str,
-    period: str = Query("Todo el período"),
+    start_date: str = Query(""), end_date: str = Query(""),
     exclude_commercial: bool = Query(True),
     categoria: str = Query("", description="Filtrar por categoría"),
     marca: str = Query("", description="Filtrar por marca"),
 ):
-    return _build_hallazgos(analysis_id, period, exclude_commercial, categoria, marca)
+    return _build_hallazgos(analysis_id, start_date, end_date, exclude_commercial, categoria, marca)
 
 
 @app.get("/api/{analysis_id}/export/hallazgos/{tipo}")
-def export_hallazgos_excel(analysis_id: str, tipo: str):
+def export_hallazgos_excel(analysis_id: str, tipo: str, start_date: str = Query(""), end_date: str = Query("")):
     data = _get_data(analysis_id)
-    hallazgos = _build_hallazgos(analysis_id, "Todo el período")
+    hallazgos = _build_hallazgos(analysis_id, start_date, end_date)
     h = hallazgos.get(tipo)
     if not h:
         raise HTTPException(404, "Hallazgo no encontrado")
@@ -382,24 +398,13 @@ def export_hallazgos_excel(analysis_id: str, tipo: str):
 @app.get("/api/{analysis_id}/pareto")
 def get_pareto(
     analysis_id: str,
-    period: str = Query("Todo el período", description="Período de análisis"),
+    start_date: str = Query(""), end_date: str = Query(""),
     exclude_commercial: bool = Query(True),
 ):
     data = _get_data(analysis_id)
-    max_date = data["max_date"]
-    min_date = data["min_date"]
+    p_start, p_end = _parse_dates(data, start_date, end_date)
 
-    offsets = {
-        "Últimas 4 semanas": pd.Timedelta(weeks=4),
-        "Últimas 8 semanas": pd.Timedelta(weeks=8),
-        "Últimos 3 meses": pd.Timedelta(days=90),
-    }
-    p_start = max_date - offsets.get(period, pd.Timedelta(0))
-    if period == "Todo el período":
-        p_start = min_date
-    p_start = max(p_start, min_date)
-
-    sku = build_sku_summary(data["sales"], data["stock"], p_start, max_date)
+    sku = build_sku_summary(data["sales"], data["stock"], p_start, p_end)
     if exclude_commercial:
         sku = filter_commercial(sku)
     pareto = pareto_analysis(sku)
@@ -434,7 +439,7 @@ def get_pareto(
 
     return {
         "filtros": {
-            "periodo": period,
+            "start_date": start_date, "end_date": end_date,
             "excluir_conceptos_comerciales": exclude_commercial,
         },
         "chart": chart,
@@ -445,9 +450,9 @@ def get_pareto(
 
 
 @app.get("/api/{analysis_id}/export/pareto")
-def export_pareto_excel(analysis_id: str):
+def export_pareto_excel(analysis_id: str, start_date: str = Query(""), end_date: str = Query("")):
     data = _get_data(analysis_id)
-    pdata = get_pareto(analysis_id, "Todo el período", True)
+    pdata = get_pareto(analysis_id, start_date, end_date, True)
     df = pd.DataFrame(pdata["productos"])
     excel_bytes = export_to_excel(df, sheet_name="Pareto")
     return StreamingResponse(
@@ -462,22 +467,16 @@ def export_pareto_excel(analysis_id: str):
 @app.get("/api/{analysis_id}/stock-sin-ventas")
 def get_stock_sin_ventas(
     analysis_id: str,
-    period: str = Query("Todo", description="Período sin ventas: 30, 60, 90, 180 días o Todo"),
+    start_date: str = Query(""), end_date: str = Query(""),
     exclude_commercial: bool = Query(True),
     categoria: str = Query("", description="Filtrar por categoría"),
     marca: str = Query("", description="Filtrar por marca"),
     stock_min: float = Query(0, description="Stock mínimo"),
 ):
     data = _get_data(analysis_id)
-    max_date = data["max_date"]
-    min_date = data["min_date"]
+    d_start, h_end = _parse_dates(data, start_date, end_date)
 
-    days_map = {"30": 30, "60": 60, "90": 90, "180": 180}
-    inact_days = days_map.get(period, 0)
-    d_start = max_date - pd.Timedelta(days=inact_days) if period in days_map else min_date
-    d_start = max(d_start, min_date)
-
-    sku = classify_skus(build_sku_summary(data["sales"], data["stock"], d_start, max_date))
+    sku = classify_skus(build_sku_summary(data["sales"], data["stock"], d_start, h_end))
     if exclude_commercial:
         sku = filter_commercial(sku)
     if categoria and categoria != "Todas":
@@ -487,7 +486,8 @@ def get_stock_sin_ventas(
     if stock_min > 0:
         sku = sku[sku["Cantidad Disponible"] >= stock_min]
 
-    if period in days_map:
+    inact_days = 90  # Días sin venta para considerar producto inactivo
+    if True:
         cond = (
             (sku["Cantidad Disponible"] > 0)
             & (sku["dias_desde_ultima_venta"].isna() | (sku["dias_desde_ultima_venta"] >= inact_days))
@@ -507,7 +507,7 @@ def get_stock_sin_ventas(
 
     return {
         "filtros": {
-            "periodo": f"{period} días" if period in days_map else "Todo",
+            "start_date": start_date, "end_date": end_date,
             "excluir_conceptos_comerciales": exclude_commercial,
             "categoria": categoria or "Todas",
             "marca": marca or "Todas",
@@ -521,9 +521,9 @@ def get_stock_sin_ventas(
 
 
 @app.get("/api/{analysis_id}/export/stock-sin-ventas")
-def export_stock_sin_ventas_excel(analysis_id: str):
+def export_stock_sin_ventas_excel(analysis_id: str, start_date: str = Query(""), end_date: str = Query("")):
     data = _get_data(analysis_id)
-    sd = get_stock_sin_ventas(analysis_id, "Todo", True, "", "", 0)
+    sd = get_stock_sin_ventas(analysis_id, start_date, end_date, True, "", "", 0)
     df = pd.DataFrame(sd["productos"])
     excel_bytes = export_to_excel(df, sheet_name="Stock sin ventas")
     return StreamingResponse(
@@ -538,20 +538,15 @@ def export_stock_sin_ventas_excel(analysis_id: str):
 @app.get("/api/{analysis_id}/demanda-sin-stock")
 def get_demanda_sin_stock(
     analysis_id: str,
-    period: str = Query("Historial completo", description="Periodo de referencia"),
+    start_date: str = Query(""), end_date: str = Query(""),
     exclude_commercial: bool = Query(True),
     venta_min: float = Query(0, description="Venta mínima histórica"),
     dias_min: int = Query(0, description="Días mínimos sin stock"),
 ):
     data = _get_data(analysis_id)
-    max_date = data["max_date"]
-    min_date = data["min_date"]
+    ns_start, h_end = _parse_dates(data, start_date, end_date)
 
-    ns_start = max_date - pd.Timedelta(weeks=12) if "12" in period else \
-               max_date - pd.Timedelta(weeks=24) if "24" in period else min_date
-    ns_start = max(ns_start, min_date)
-
-    sku = classify_skus(build_sku_summary(data["sales"], data["stock"], ns_start, max_date))
+    sku = classify_skus(build_sku_summary(data["sales"], data["stock"], ns_start, h_end))
     if exclude_commercial:
         sku = filter_commercial(sku)
     if venta_min > 0:
@@ -562,7 +557,7 @@ def get_demanda_sin_stock(
     dem = sku[sku["alerta"] == "Demanda histórica sin stock"].copy()
 
     if dem.empty:
-        return {"filtros": {"periodo": period, "excluir_conceptos_comerciales": exclude_commercial}, "count": 0, "venta_potencial": 0, "chart": [], "productos": []}
+        return {"filtros": {"start_date": start_date, "end_date": end_date, "excluir_conceptos_comerciales": exclude_commercial}, "count": 0, "venta_potencial": 0, "chart": [], "productos": []}
 
     dem["venta_potencial"] = dem["venta_promedio_mientras_vendia"] * dem["dias_desde_ultima_venta"]
     dem = _sku_rows(dem, data["stock"], "venta_potencial", False)
@@ -589,7 +584,7 @@ def get_demanda_sin_stock(
 
     return {
         "filtros": {
-            "periodo": period,
+            "start_date": start_date, "end_date": end_date,
             "excluir_conceptos_comerciales": exclude_commercial,
             "venta_minima_historica": venta_min,
             "dias_minimos_sin_stock": dias_min,
@@ -625,9 +620,9 @@ def get_demanda_history(analysis_id: str, sku: str):
 
 
 @app.get("/api/{analysis_id}/export/demanda-sin-stock")
-def export_demanda_sin_stock_excel(analysis_id: str):
+def export_demanda_sin_stock_excel(analysis_id: str, start_date: str = Query(""), end_date: str = Query("")):
     data = _get_data(analysis_id)
-    dd = get_demanda_sin_stock(analysis_id, "Historial completo", True, 0, 0)
+    dd = get_demanda_sin_stock(analysis_id, start_date, end_date, True, "", "", 0)
     df = pd.DataFrame(dd["productos"])
     excel_bytes = export_to_excel(df, sheet_name="Demanda sin stock")
     return StreamingResponse(
@@ -642,24 +637,21 @@ def export_demanda_sin_stock_excel(analysis_id: str):
 @app.get("/api/{analysis_id}/quiebres")
 def get_quiebres(
     analysis_id: str,
-    period: str = Query("Últimas 4 semanas", description="Periodo para demanda diaria"),
+    start_date: str = Query(""), end_date: str = Query(""),
     exclude_commercial: bool = Query(True),
+    categoria: str = Query("", description="Filtrar por categor\u00eda"),
+    marca: str = Query("", description="Filtrar por marca"),
 ):
     data = _get_data(analysis_id)
-    max_date = data["max_date"]
-    min_date = data["min_date"]
+    qb_start, h_end = _parse_dates(data, start_date, end_date)
 
-    offsets = {
-        "Últimas 2 semanas": pd.Timedelta(weeks=2),
-        "Últimas 4 semanas": pd.Timedelta(weeks=4),
-        "Últimas 8 semanas": pd.Timedelta(weeks=8),
-    }
-    qb_start = max_date - offsets.get(period, pd.Timedelta(weeks=4))
-    qb_start = max(qb_start, min_date)
-
-    sku = classify_skus(build_sku_summary(data["sales"], data["stock"], qb_start, max_date))
+    sku = classify_skus(build_sku_summary(data["sales"], data["stock"], qb_start, h_end))
     if exclude_commercial:
         sku = filter_commercial(sku)
+    if categoria and categoria != "Todas":
+        sku = sku[sku["Categor\u00eda"] == categoria]
+    if marca and marca != "Todas":
+        sku = sku[sku["Marca"] == marca]
 
     cov = sku[
         (sku["unidades_promedio_diaria_30d"] > 0) & (sku["dias_cobertura"].notna())
@@ -674,7 +666,7 @@ def get_quiebres(
             "demanda_diaria": round(float(r["unidades_promedio_diaria_30d"]), 2),
         })
 
-    crit = sku[sku["alerta"].isin(["Quiebre crítico", "Riesgo de quiebre"])].sort_values("dias_cobertura")
+    crit = sku[sku["alerta"].isin(["Quiebre cr\u00edtico", "Riesgo de quiebre"])].sort_values("dias_cobertura")
     crit = _sku_rows(crit, data["stock"], "dias_cobertura", True)
 
     productos = []
@@ -691,7 +683,7 @@ def get_quiebres(
 
     return {
         "filtros": {
-            "periodo": period,
+            "start_date": start_date, "end_date": end_date,
             "excluir_conceptos_comerciales": exclude_commercial,
         },
         "chart": chart,
@@ -701,9 +693,9 @@ def get_quiebres(
 
 
 @app.get("/api/{analysis_id}/export/quiebres")
-def export_quiebres_excel(analysis_id: str):
+def export_quiebres_excel(analysis_id: str, start_date: str = Query(""), end_date: str = Query("")):
     data = _get_data(analysis_id)
-    qd = get_quiebres(analysis_id, "Últimas 4 semanas")
+    qd = get_quiebres(analysis_id, start_date, end_date)
     df = pd.DataFrame(qd["productos"])
     excel_bytes = export_to_excel(df, sheet_name="Quiebres")
     return StreamingResponse(
@@ -718,23 +710,14 @@ def export_quiebres_excel(analysis_id: str):
 @app.get("/api/{analysis_id}/caidas-crecimiento")
 def get_caidas_crecimiento(
     analysis_id: str,
-    period: str = Query("Comparar últimas 8 semanas vs 8 semanas anteriores", description="Periodo comparativo"),
+    start_date: str = Query(""), end_date: str = Query(""),
     exclude_commercial: bool = Query(True),
     umbral_pct: float = Query(0, description="Umbral mínimo de variación porcentual"),
 ):
     data = _get_data(analysis_id)
-    max_date = data["max_date"]
-    min_date = data["min_date"]
+    h_start, h_end = _parse_dates(data, start_date, end_date)
 
-    if "4 semanas" in period:
-        ca_start = max_date - pd.Timedelta(days=56)
-    elif "8 semanas" in period:
-        ca_start = max_date - pd.Timedelta(days=112)
-    else:
-        ca_start = max_date - pd.Timedelta(days=180)
-    ca_start = max(ca_start, min_date)
-
-    sku = classify_skus(build_sku_summary(data["sales"], data["stock"], ca_start, max_date))
+    sku = classify_skus(build_sku_summary(data["sales"], data["stock"], h_start, h_end))
     if exclude_commercial:
         sku = filter_commercial(sku)
 
@@ -772,7 +755,7 @@ def get_caidas_crecimiento(
 
     return {
         "filtros": {
-            "periodo": period,
+            "start_date": start_date, "end_date": end_date,
             "excluir_conceptos_comerciales": exclude_commercial,
             "umbral_minimo_pct": umbral_pct,
         },
@@ -790,9 +773,9 @@ def get_caidas_crecimiento(
 
 
 @app.get("/api/{analysis_id}/export/caidas-crecimiento/{tipo}")
-def export_caidas_crecimiento_excel(analysis_id: str, tipo: str):
+def export_caidas_crecimiento_excel(analysis_id: str, tipo: str, start_date: str = Query(""), end_date: str = Query("")):
     data = _get_data(analysis_id)
-    cc = get_caidas_crecimiento(analysis_id, "Comparar últimas 8 semanas vs 8 semanas anteriores", True, 0)
+    cc = get_caidas_crecimiento(analysis_id, start_date, end_date, True, 0)
     section = cc.get(tipo)
     if not section:
         raise HTTPException(404, "Sección no encontrada")
@@ -1078,7 +1061,7 @@ def _reposicion_pdf_report(df: pd.DataFrame, filtros: dict, resumen: dict) -> by
     pdf.set_xy(20, box_y + 17)
     pdf.set_font("Helvetica", "", 7)
     pdf.set_text_color(100, 116, 139)
-    pdf.cell(18, 5, "PERIODO:")
+    pdf.cell(35, 5, "RANGO ANALIZADO:")
     pdf.set_font("Helvetica", "B", 8)
     pdf.set_text_color(15, 23, 42)
     pdf.cell(70, 5, f'{filtros.get("dias_analisis", "")} días')

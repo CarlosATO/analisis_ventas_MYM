@@ -30,22 +30,25 @@ function FilterBadge({ label, value }: { label: string; value: string | number |
 function FiltrosDisplay({ filtros, count }: { filtros?: FiltrosActivos; count?: number }) {
   if (!filtros) return null
   return (
-    <div className="flex flex-wrap gap-2 mb-3">
-      <FilterBadge label="Período" value={filtros.periodo} />
-      <FilterBadge label="Excluir comerciales" value={filtros.excluir_conceptos_comerciales} />
-      <FilterBadge label="Proveedor" value={filtros.proveedor && filtros.proveedor !== "Todos" ? filtros.proveedor : undefined} />
-      <FilterBadge label="Categoría" value={filtros.categoria && filtros.categoria !== "Todas" ? filtros.categoria : undefined} />
-      <FilterBadge label="Marca" value={filtros.marca && filtros.marca !== "Todas" ? filtros.marca : undefined} />
-      <FilterBadge label="Días" value={filtros.dias_analisis} />
-      <FilterBadge label="Cobertura objetivo" value={filtros.cobertura_objetivo ? `${filtros.cobertura_objetivo} semanas` : undefined} />
-      <FilterBadge label="Stock mín" value={filtros.stock_minimo && filtros.stock_minimo > 0 ? filtros.stock_minimo : undefined} />
-      <FilterBadge label="Sin stock/sin venta" value={filtros.incluir_sin_stock_sin_venta} />
-      {count !== undefined && (
-        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold" style={{ backgroundColor: "var(--accent)", color: "#fff" }}>
-          Resultado: {count.toLocaleString("es-CL")}
-        </span>
-      )}
-    </div>
+    <>
+      <DateRangeBadge start={filtros.start_date} end={filtros.end_date} />
+      <div className="flex flex-wrap gap-2 mb-3">
+            <FilterBadge label="Excluir comerciales" value={filtros.excluir_conceptos_comerciales} />
+        <FilterBadge label="Excluir comerciales" value={filtros.excluir_conceptos_comerciales} />
+        <FilterBadge label="Proveedor" value={filtros.proveedor && filtros.proveedor !== "Todos" ? filtros.proveedor : undefined} />
+        <FilterBadge label="Categoría" value={filtros.categoria && filtros.categoria !== "Todas" ? filtros.categoria : undefined} />
+        <FilterBadge label="Marca" value={filtros.marca && filtros.marca !== "Todas" ? filtros.marca : undefined} />
+        <FilterBadge label="Días" value={filtros.dias_analisis} />
+        <FilterBadge label="Cobertura objetivo" value={filtros.cobertura_objetivo ? `${filtros.cobertura_objetivo} semanas` : undefined} />
+        <FilterBadge label="Stock mín" value={filtros.stock_minimo && filtros.stock_minimo > 0 ? filtros.stock_minimo : undefined} />
+        <FilterBadge label="Sin stock/sin venta" value={filtros.incluir_sin_stock_sin_venta} />
+        {count !== undefined && (
+          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold" style={{ backgroundColor: "var(--accent)", color: "#fff" }}>
+            Resultado: {count.toLocaleString("es-CL")}
+          </span>
+        )}
+      </div>
+    </>
   )
 }
 
@@ -135,6 +138,42 @@ function FilterCheckbox({ label, checked, onChange }: { label: string; checked: 
 // APP
 // ════════════════════════════════════
 
+function FilterDateRange({
+  startValue, endValue, onStartChange, onEndChange
+}: {
+  startValue: string, endValue: string,
+  onStartChange: (v: string) => void, onEndChange: (v: string) => void
+}) {
+  return (
+    <div className="flex items-center gap-4 text-sm text-gray-700 bg-gray-50 px-3 py-2 rounded-md border border-gray-200">
+      <div className="flex items-center gap-2">
+        <label className="font-semibold whitespace-nowrap">Desde:</label>
+        <input type="date" value={startValue} max={endValue || undefined} onChange={e => onStartChange(e.target.value)} className="border-gray-300 rounded px-2 py-1 text-sm bg-white focus:ring-blue-500 focus:border-blue-500" />
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="font-semibold whitespace-nowrap">Hasta:</label>
+        <input type="date" value={endValue} min={startValue || undefined} onChange={e => onEndChange(e.target.value)} className="border-gray-300 rounded px-2 py-1 text-sm bg-white focus:ring-blue-500 focus:border-blue-500" />
+      </div>
+    </div>
+  )
+}
+
+function DateRangeBadge({ start, end }: { start?: string, end?: string }) {
+  if (!start && !end) return null;
+  const fmt = (d: string) => {
+    if (!d) return "";
+    const parts = d.split("-");
+    if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    return d;
+  }
+  return (
+    <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-3 py-2 rounded-md mb-4 font-medium text-sm flex items-center gap-2 shadow-sm w-max">
+      <svg className="w-5 h-5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+      Rango analizado: {fmt(start!)} a {fmt(end!)}
+    </div>
+  )
+}
+
 export default function App() {
   const [uploaded, setUploaded] = useState<UploadResponse | null>(null)
   const [analysisId, setAnalysisId] = useState<string | null>(null)
@@ -148,18 +187,20 @@ export default function App() {
   // Hallazgos
   const [hallazgos, setHallazgos] = useState<HallazgosResponse | null>(null)
   const [hallazgosModal, setHallazgosModal] = useState<{ title: string; productos: ProductRow[]; exportUrl: string } | null>(null)
-  const [hPeriod, setHPeriod] = useState("Todo el período")
+  const [hStartDate, setHStartDate] = useState("")
+  const [hEndDate, setHEndDate] = useState("")
   const [hCategoria] = useState("")
   const [hMarca] = useState("")
   const [hExclude, setHExclude] = useState(true)
 
   // Pareto
   const [pareto, setPareto] = useState<ParetoResponse | null>(null)
-  const [pExclude, setPExclude] = useState(true)
+  const [pStartDate, setPStartDate] = useState(''); const [pEndDate, setPEndDate] = useState(''); const [pExclude, setPExclude] = useState(true);
 
   // Stock SV
   const [stockSv, setStockSv] = useState<StockSinVentasResponse | null>(null)
-  const [ssPeriod, setSsPeriod] = useState("Todo")
+  const [ssStartDate, setSsStartDate] = useState("")
+  const [ssEndDate, setSsEndDate] = useState("")
   const [ssExclude, setSsExclude] = useState(true)
   const [ssCategoria] = useState("")
   const [ssMarca] = useState("")
@@ -167,17 +208,20 @@ export default function App() {
 
   // Demanda
   const [demanda, setDemanda] = useState<DemandaSinStockResponse | null>(null)
-  const [dPeriod, setDPeriod] = useState("Historial completo")
+  const [dStartDate, setDStartDate] = useState("")
+  const [dEndDate, setDEndDate] = useState("")
   const [dExclude, setDExclude] = useState(true)
 
   // Quiebres
   const [quiebres, setQuiebres] = useState<QuiebresResponse | null>(null)
-  const [qPeriod, setQPeriod] = useState("Últimas 4 semanas")
+  const [qStartDate, setQStartDate] = useState("")
+  const [qEndDate, setQEndDate] = useState("")
   const [qExclude, setQExclude] = useState(true)
 
   // Caidas
   const [caidas, setCaidas] = useState<CaidasCrecimientoResponse | null>(null)
-  const [cPeriod, setCPeriod] = useState("Comparar últimas 8 semanas vs 8 semanas anteriores")
+  const [cStartDate, setCStartDate] = useState("")
+  const [cEndDate, setCEndDate] = useState("")
   const [cExclude, setCExclude] = useState(true)
 
   // Reposición Inteligente
@@ -186,7 +230,7 @@ export default function App() {
   const [rProveedor] = useState("")
   const [rMarca] = useState("")
   const [rCategoria] = useState("")
-  const [rDias, setRDias] = useState(4)
+  const [rDias, setRDias] = useState(28)
   const [rCobertura, setRCobertura] = useState(2)
   const [rStockMin, setRStockMin] = useState(0)
   const [rExclude, setRExclude] = useState(true)
@@ -218,8 +262,8 @@ export default function App() {
 
   const loadHallazgos = useCallback(async () => {
     if (!analysisId) return
-    setHallazgos(await getHallazgos(analysisId, { period: hPeriod, exclude_commercial: hExclude, categoria: hCategoria, marca: hMarca }))
-  }, [analysisId, hPeriod, hExclude, hCategoria, hMarca])
+    setHallazgos(await getHallazgos(analysisId, { start_date: hStartDate, end_date: hEndDate, exclude_commercial: hExclude, categoria: hCategoria, marca: hMarca }))
+  }, [analysisId, hStartDate, hEndDate, hExclude, hCategoria, hMarca])
 
   const loadPareto = useCallback(async () => {
     if (!analysisId) return
@@ -228,23 +272,23 @@ export default function App() {
 
   const loadStockSv = useCallback(async () => {
     if (!analysisId) return
-    setStockSv(await getStockSinVentas(analysisId, { period: ssPeriod, exclude_commercial: ssExclude, categoria: ssCategoria, marca: ssMarca, stock_min: ssStockMin || undefined }))
-  }, [analysisId, ssPeriod, ssExclude, ssCategoria, ssMarca, ssStockMin])
+    setStockSv(await getStockSinVentas(analysisId, { start_date: ssStartDate, end_date: ssEndDate, exclude_commercial: ssExclude, categoria: ssCategoria, marca: ssMarca, stock_min: ssStockMin || undefined }))
+  }, [analysisId, ssStartDate, ssEndDate, ssExclude, ssCategoria, ssMarca, ssStockMin])
 
   const loadDemanda = useCallback(async () => {
     if (!analysisId) return
-    setDemanda(await getDemandaSinStock(analysisId, { period: dPeriod, exclude_commercial: dExclude }))
-  }, [analysisId, dPeriod, dExclude])
+    setDemanda(await getDemandaSinStock(analysisId, { start_date: dStartDate, end_date: dEndDate, exclude_commercial: dExclude }))
+  }, [analysisId, dStartDate, dEndDate, dExclude])
 
   const loadQuiebres = useCallback(async () => {
     if (!analysisId) return
-    setQuiebres(await getQuiebres(analysisId, { period: qPeriod, exclude_commercial: qExclude }))
-  }, [analysisId, qPeriod, qExclude])
+    setQuiebres(await getQuiebres(analysisId, { start_date: qStartDate, end_date: qEndDate, exclude_commercial: qExclude }))
+  }, [analysisId, qStartDate, qEndDate, qExclude])
 
   const loadCaidas = useCallback(async () => {
     if (!analysisId) return
-    setCaidas(await getCaidasCrecimiento(analysisId, { period: cPeriod, exclude_commercial: cExclude }))
-  }, [analysisId, cPeriod, cExclude])
+    setCaidas(await getCaidasCrecimiento(analysisId, { start_date: cStartDate, end_date: cEndDate, exclude_commercial: cExclude }))
+  }, [analysisId, cStartDate, cEndDate, cExclude])
 
   const loadReposicionFiltros = useCallback(async () => {
     if (!analysisId) return
@@ -446,7 +490,19 @@ export default function App() {
       const weekly = await getWeekly(res.analysis_id)
       setWeeklyData(weekly.weeks.filter(w => w.venta >= 0))
       setUploadPhase("done")
-      setFilesChanged(false)
+              setFilesChanged(false)
+        setHStartDate(res.date_range.min)
+        setHEndDate(res.date_range.max)
+        setPStartDate(res.date_range.min)
+        setPEndDate(res.date_range.max)
+        setSsStartDate(res.date_range.min)
+        setSsEndDate(res.date_range.max)
+        setDStartDate(res.date_range.min)
+        setDEndDate(res.date_range.max)
+        setQStartDate(res.date_range.min)
+        setQEndDate(res.date_range.max)
+        setCStartDate(res.date_range.min)
+        setCEndDate(res.date_range.max)
       setTab("reposicion")
     } catch (err: any) { setUploadError(err.message ?? "Error al procesar los archivos. Intente nuevamente."); setUploadPhase("idle") }
   }
@@ -605,8 +661,7 @@ export default function App() {
         {tab === "hallazgos" && analysisId && (
           <>
             <FilterPanel>
-              <FilterSelect label="Período" value={hPeriod} onChange={v => { setHPeriod(v); setHallazgos(null) }}
-                options={[{ value: "Todo el período", label: "Todo el período" }, { value: "Últimas 4 semanas", label: "Últimas 4 semanas" }, { value: "Últimas 8 semanas", label: "Últimas 8 semanas" }, { value: "Últimas 12 semanas", label: "Últimas 12 semanas" }]} />
+              <FilterDateRange startValue={hStartDate} endValue={hEndDate} onStartChange={v => {setHStartDate(v); setHallazgos(null)}} onEndChange={v => {setHEndDate(v); setHallazgos(null)}} />
               <FilterCheckbox label="Excluir conceptos comerciales" checked={hExclude} onChange={v => { setHExclude(v); setHallazgos(null) }} />
               <Button size="sm" onClick={loadHallazgos} disabled={!analysisId}>Aplicar filtros</Button>
             </FilterPanel>
@@ -616,28 +671,28 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <HallazgoCard icon={<Package className="h-5 w-5" />} priority="Alta" title="Stock sin ventas"
                     summary={`${hallazgos.stock_sin_ventas.count} productos, ${fmtMoney(hallazgos.stock_sin_ventas.valor_total)} inmovilizados.`}
-                    onView={() => setHallazgosModal({ title: "Stock sin ventas", productos: hallazgos.stock_sin_ventas.productos, exportUrl: getHallazgosExportUrl(analysisId, "stock_sin_ventas") })}
-                    onExport={() => window.open(getHallazgosExportUrl(analysisId, "stock_sin_ventas"))} />
+                    onView={() => setHallazgosModal({ title: "Stock sin ventas", productos: hallazgos.stock_sin_ventas.productos, exportUrl: getHallazgosExportUrl(analysisId, "stock_sin_ventas", hStartDate, hEndDate) })}
+                    onExport={() => window.open(getHallazgosExportUrl(analysisId, "stock_sin_ventas", hStartDate, hEndDate))} />
                   <HallazgoCard icon={<ShoppingCart className="h-5 w-5" />} priority="Alta" title="Demanda sin stock"
                     summary={`${hallazgos.demanda_sin_stock.count} productos, ${fmtMoney(hallazgos.demanda_sin_stock.venta_potencial)} potencial perdido.`}
-                    onView={() => setHallazgosModal({ title: "Demanda sin stock", productos: hallazgos.demanda_sin_stock.productos, exportUrl: getHallazgosExportUrl(analysisId, "demanda_sin_stock") })}
-                    onExport={() => window.open(getHallazgosExportUrl(analysisId, "demanda_sin_stock"))} />
+                    onView={() => setHallazgosModal({ title: "Demanda sin stock", productos: hallazgos.demanda_sin_stock.productos, exportUrl: getHallazgosExportUrl(analysisId, "demanda_sin_stock", hStartDate, hEndDate) })}
+                    onExport={() => window.open(getHallazgosExportUrl(analysisId, "demanda_sin_stock", hStartDate, hEndDate))} />
                   <HallazgoCard icon={<ShieldAlert className="h-5 w-5" />} priority="Alta" title="Quiebre crítico"
                     summary={`${hallazgos.quiebre_critico.count} productos con cobertura <7 días.`}
-                    onView={() => setHallazgosModal({ title: "Quiebre crítico", productos: hallazgos.quiebre_critico.productos, exportUrl: getHallazgosExportUrl(analysisId, "quiebre_critico") })}
-                    onExport={() => window.open(getHallazgosExportUrl(analysisId, "quiebre_critico"))} />
+                    onView={() => setHallazgosModal({ title: "Quiebre crítico", productos: hallazgos.quiebre_critico.productos, exportUrl: getHallazgosExportUrl(analysisId, "quiebre_critico", hStartDate, hEndDate) })}
+                    onExport={() => window.open(getHallazgosExportUrl(analysisId, "quiebre_critico", hStartDate, hEndDate))} />
                   <HallazgoCard icon={<BarChart3 className="h-5 w-5" />} priority="Media" title="Concentración Pareto"
                     summary={`${hallazgos.pareto.sku_80} de ${hallazgos.pareto.total_sku} SKU (${fmtPct(hallazgos.pareto.pct_sku)}) generan 80% de ventas.`}
-                    onView={() => setHallazgosModal({ title: "Core Pareto 80%", productos: hallazgos.pareto.productos, exportUrl: getHallazgosExportUrl(analysisId, "pareto") })}
-                    onExport={() => window.open(getHallazgosExportUrl(analysisId, "pareto"))} />
+                    onView={() => setHallazgosModal({ title: "Core Pareto 80%", productos: hallazgos.pareto.productos, exportUrl: getHallazgosExportUrl(analysisId, "pareto", hStartDate, hEndDate) })}
+                    onExport={() => window.open(getHallazgosExportUrl(analysisId, "pareto", hStartDate, hEndDate))} />
                   <HallazgoCard icon={<TrendingDown className="h-5 w-5" />} priority="Media" title="Mayor caída"
                     summary={`${hallazgos.caidas.count} productos. Mayor caída: ${fmtMoney(hallazgos.caidas.mayor_caida)}.`}
-                    onView={() => setHallazgosModal({ title: "Caídas", productos: hallazgos.caidas.productos, exportUrl: getHallazgosExportUrl(analysisId, "caidas") })}
-                    onExport={() => window.open(getHallazgosExportUrl(analysisId, "caidas"))} />
+                    onView={() => setHallazgosModal({ title: "Caídas", productos: hallazgos.caidas.productos, exportUrl: getHallazgosExportUrl(analysisId, "caidas", hStartDate, hEndDate) })}
+                    onExport={() => window.open(getHallazgosExportUrl(analysisId, "caidas", hStartDate, hEndDate))} />
                   <HallazgoCard icon={<TrendingUp className="h-5 w-5" />} priority="Baja" title="Mayor crecimiento"
                     summary={`${hallazgos.crecimiento.count} productos. Mayor: ${fmtMoney(hallazgos.crecimiento.mayor_crecimiento)}.`}
-                    onView={() => setHallazgosModal({ title: "Crecimiento", productos: hallazgos.crecimiento.productos, exportUrl: getHallazgosExportUrl(analysisId, "crecimiento") })}
-                    onExport={() => window.open(getHallazgosExportUrl(analysisId, "crecimiento"))} />
+                    onView={() => setHallazgosModal({ title: "Crecimiento", productos: hallazgos.crecimiento.productos, exportUrl: getHallazgosExportUrl(analysisId, "crecimiento", hStartDate, hEndDate) })}
+                    onExport={() => window.open(getHallazgosExportUrl(analysisId, "crecimiento", hStartDate, hEndDate))} />
                 </div>
               </>
             )}
@@ -648,6 +703,7 @@ export default function App() {
         {tab === "pareto" && analysisId && (
           <>
             <FilterPanel>
+              <FilterDateRange startValue={pStartDate} endValue={pEndDate} onStartChange={v => {setPStartDate(v); setPareto(null)}} onEndChange={v => {setPEndDate(v); setPareto(null)}} />
               <FilterCheckbox label="Excluir conceptos comerciales" checked={pExclude} onChange={v => { setPExclude(v); setPareto(null) }} />
               <Button size="sm" onClick={loadPareto}>Aplicar</Button>
             </FilterPanel>
@@ -675,7 +731,7 @@ export default function App() {
                 <Card>
                   <div className="flex items-center justify-between mb-3">
                     <CardTitle>Ranking</CardTitle>
-                    <a href={getParetoExportUrl(analysisId)} download><Button variant="secondary" size="sm"><Download className="h-3 w-3 mr-1" />Excel</Button></a>
+                    <a href={getParetoExportUrl(analysisId, pStartDate, pEndDate)} download><Button variant="secondary" size="sm"><Download className="h-3 w-3 mr-1" />Excel</Button></a>
                   </div>
                   <Table>
                     <THead><TR><TH>#</TH><TH>SKU</TH><TH>Producto</TH><TH className="text-right">Venta</TH><TH className="text-right">Unid.</TH><TH className="text-right">% Acum.</TH><TH className="text-right">Clasif.</TH><TH className="text-right">Stock</TH></TR></THead>
@@ -704,8 +760,7 @@ export default function App() {
         {tab === "stock" && analysisId && (
           <>
             <FilterPanel>
-              <FilterSelect label="Período sin ventas" value={ssPeriod} onChange={v => { setSsPeriod(v); setStockSv(null) }}
-                options={[{ value: "30", label: "30 días" }, { value: "60", label: "60 días" }, { value: "90", label: "90 días" }, { value: "180", label: "180 días" }, { value: "Todo", label: "Todo" }]} />
+              <FilterDateRange startValue={ssStartDate} endValue={ssEndDate} onStartChange={v => {setSsStartDate(v); setStockSv(null)}} onEndChange={v => {setSsEndDate(v); setStockSv(null)}} />
               <FilterCheckbox label="Excluir conceptos comerciales" checked={ssExclude} onChange={v => { setSsExclude(v); setStockSv(null) }} />
               <Button size="sm" onClick={loadStockSv}>Aplicar</Button>
             </FilterPanel>
@@ -733,7 +788,7 @@ export default function App() {
                 <Card>
                   <div className="flex items-center justify-between mb-3">
                     <CardTitle>Productos ({stockSv.count})</CardTitle>
-                    <a href={getStockSinVentasExportUrl(analysisId)} download><Button variant="secondary" size="sm"><Download className="h-3 w-3 mr-1" />Excel</Button></a>
+                    <a href={getStockSinVentasExportUrl(analysisId, ssStartDate, ssEndDate)} download><Button variant="secondary" size="sm"><Download className="h-3 w-3 mr-1" />Excel</Button></a>
                   </div>
                   <ProductTable productos={stockSv.productos} />
                 </Card>
@@ -746,8 +801,7 @@ export default function App() {
         {tab === "demanda" && analysisId && (
           <>
             <FilterPanel>
-              <FilterSelect label="Período" value={dPeriod} onChange={v => { setDPeriod(v); setDemanda(null) }}
-                options={[{ value: "Historial completo", label: "Historial completo" }, { value: "Últimas 12 semanas", label: "Últimas 12 semanas" }, { value: "Últimas 24 semanas", label: "Últimas 24 semanas" }]} />
+              <FilterDateRange startValue={dStartDate} endValue={dEndDate} onStartChange={v => {setDStartDate(v); setDemanda(null)}} onEndChange={v => {setDEndDate(v); setDemanda(null)}} />
               <FilterCheckbox label="Excluir conceptos comerciales" checked={dExclude} onChange={v => { setDExclude(v); setDemanda(null) }} />
               <Button size="sm" onClick={loadDemanda}>Aplicar</Button>
             </FilterPanel>
@@ -775,7 +829,7 @@ export default function App() {
                 <Card>
                   <div className="flex items-center justify-between mb-3">
                     <CardTitle>Productos ({demanda.count})</CardTitle>
-                    <a href={getDemandaExportUrl(analysisId)} download><Button variant="secondary" size="sm"><Download className="h-3 w-3 mr-1" />Excel</Button></a>
+                    <a href={getDemandaExportUrl(analysisId, dStartDate, dEndDate)} download><Button variant="secondary" size="sm"><Download className="h-3 w-3 mr-1" />Excel</Button></a>
                   </div>
                   <Table>
                     <THead><TR><TH>#</TH><TH>SKU</TH><TH>Producto</TH><TH className="text-right">Vta histórica</TH><TH className="text-right">Unid.</TH><TH className="text-right">Última venta</TH><TH className="text-right">Días sin vta</TH><TH className="text-right">Vta potencial</TH></TR></THead>
@@ -804,8 +858,7 @@ export default function App() {
         {tab === "quiebres" && analysisId && (
           <>
             <FilterPanel>
-              <FilterSelect label="Período" value={qPeriod} onChange={v => { setQPeriod(v); setQuiebres(null) }}
-                options={[{ value: "Últimas 2 semanas", label: "Últimas 2 semanas" }, { value: "Últimas 4 semanas", label: "Últimas 4 semanas" }, { value: "Últimas 8 semanas", label: "Últimas 8 semanas" }]} />
+              <FilterDateRange startValue={qStartDate} endValue={qEndDate} onStartChange={v => {setQStartDate(v); setQuiebres(null)}} onEndChange={v => {setQEndDate(v); setQuiebres(null)}} />
               <FilterCheckbox label="Excluir conceptos comerciales" checked={qExclude} onChange={v => { setQExclude(v); setQuiebres(null) }} />
               <Button size="sm" onClick={loadQuiebres}>Aplicar</Button>
             </FilterPanel>
@@ -833,7 +886,7 @@ export default function App() {
                 <Card>
                   <div className="flex items-center justify-between mb-3">
                     <CardTitle>SKUs en riesgo ({quiebres.total_crit})</CardTitle>
-                    <a href={getQuiebresExportUrl(analysisId)} download><Button variant="secondary" size="sm"><Download className="h-3 w-3 mr-1" />Excel</Button></a>
+                    <a href={getQuiebresExportUrl(analysisId, qStartDate, qEndDate)} download><Button variant="secondary" size="sm"><Download className="h-3 w-3 mr-1" />Excel</Button></a>
                   </div>
                   <Table>
                     <THead><TR><TH>#</TH><TH>SKU</TH><TH>Producto</TH><TH className="text-right">Cobertura</TH><TH className="text-right">Stock</TH><TH className="text-right">Demanda diaria</TH><TH className="text-right">Alerta</TH></TR></THead>
@@ -862,10 +915,7 @@ export default function App() {
         {tab === "caidas" && analysisId && (
           <>
             <FilterPanel>
-              <FilterSelect label="Comparación" value={cPeriod} onChange={v => { setCPeriod(v); setCaidas(null) }}
-                options={[{ value: "Comparar últimas 4 semanas vs 4 semanas anteriores", label: "Últimas 4 semanas" },
-                  { value: "Comparar últimas 8 semanas vs 8 semanas anteriores", label: "Últimas 8 semanas" },
-                  { value: "Comparar últimos 3 meses vs 3 meses anteriores", label: "Últimos 3 meses" }]} />
+              <FilterDateRange startValue={cStartDate} endValue={cEndDate} onStartChange={v => {setCStartDate(v); setCaidas(null)}} onEndChange={v => {setCEndDate(v); setCaidas(null)}} />
               <FilterCheckbox label="Excluir conceptos comerciales" checked={cExclude} onChange={v => { setCExclude(v); setCaidas(null) }} />
               <Button size="sm" onClick={loadCaidas}>Aplicar</Button>
             </FilterPanel>
@@ -874,7 +924,7 @@ export default function App() {
                 <Card>
                   <div className="flex items-center justify-between mb-2">
                     <CardTitle className="text-base" style={{ color: "#ef4444" }}>Caídas</CardTitle>
-                    <a href={getCaidasCrecimientoExportUrl(analysisId, "caidas")} download><Button variant="ghost" size="sm"><Download className="h-3 w-3 mr-1" />Excel</Button></a>
+                    <a href={getCaidasCrecimientoExportUrl(analysisId, "caidas", cStartDate, cEndDate)} download><Button variant="ghost" size="sm"><Download className="h-3 w-3 mr-1" />Excel</Button></a>
                   </div>
                   <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>{caidas.caidas.count} productos, mayor caída: {fmtMoney(caidas.caidas.mayor_caida)}</p>
                   <Table>
@@ -896,7 +946,7 @@ export default function App() {
                 <Card>
                   <div className="flex items-center justify-between mb-2">
                     <CardTitle className="text-base" style={{ color: "#22c55e" }}>Crecimiento</CardTitle>
-                    <a href={getCaidasCrecimientoExportUrl(analysisId, "crecimiento")} download><Button variant="ghost" size="sm"><Download className="h-3 w-3 mr-1" />Excel</Button></a>
+                    <a href={getCaidasCrecimientoExportUrl(analysisId, "crecimiento", cStartDate, cEndDate)} download><Button variant="ghost" size="sm"><Download className="h-3 w-3 mr-1" />Excel</Button></a>
                   </div>
                   <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>{caidas.crecimiento.count} productos, mayor: {fmtMoney(caidas.crecimiento.mayor_crecimiento)}</p>
                   <Table>
@@ -927,9 +977,9 @@ export default function App() {
               <Card>
                 <div className="flex flex-wrap items-end gap-4">
                   <FilterSelect label="Período a analizar" value={String(rDias)} onChange={v => { setRDias(Number(v)); markRepoFiltersChanged() }}
-                    options={[28, 56, 84, 112, 182, 365].map(v => ({ value: String(v), label: `${v} días` }))} />
+                    options={[7, 14, 21, 28, 35, 42, 49, 56, 84, 112, 182, 365].map(v => ({ value: String(v), label: `${v} días` }))} />
                   <FilterSelect label="Cobertura objetivo" title="La cobertura objetivo indica cuántas semanas se desea cubrir con inventario. Ejemplo: si el producto vende 10 unidades por semana y la cobertura objetivo es 8 semanas, el stock objetivo será 80 unidades." value={String(rCobertura)} onChange={v => { setRCobertura(Number(v)); markRepoFiltersChanged() }}
-                    options={[4, 8, 12, 16].map(v => ({ value: String(v), label: `${v} semanas` }))} />
+                    options={[2, 4, 6, 8, 12, 16].map(v => ({ value: String(v), label: `${v} semanas` }))} />
                   <FilterCheckbox label="Incluir sin stock/venta" checked={rIncluirSinStockSinVenta} onChange={v => { setRIncluirSinStockSinVenta(v); markRepoFiltersChanged() }} />
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-medium" style={{ color: "var(--muted)" }} title="Cantidad mínima de stock que debe tener un producto para ser considerado en el sugerido. Si está en 0 no aplica filtro.">Stock mínimo</label>
@@ -963,9 +1013,9 @@ export default function App() {
 
                 <div className="flex flex-wrap items-end gap-3 rounded-xl border px-3 py-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
                   <FilterSelect label="Período a analizar" value={String(rDias)} onChange={v => { setRDias(Number(v)); setRepoAvisoFiltros("Parámetros cambiados. Presione Actualizar sugerido para recalcular.") }}
-                    options={[28, 56, 84, 112, 182, 365].map(v => ({ value: String(v), label: `${v} días` }))} />
+                    options={[7, 14, 21, 28, 35, 42, 49, 56, 84, 112, 182, 365].map(v => ({ value: String(v), label: `${v} días` }))} />
                   <FilterSelect label="Cobertura objetivo" title="La cobertura objetivo indica cuántas semanas se desea cubrir con inventario." value={String(rCobertura)} onChange={v => { setRCobertura(Number(v)); setRepoAvisoFiltros("Parámetros cambiados. Presione Actualizar sugerido para recalcular.") }}
-                    options={[4, 8, 12, 16].map(v => ({ value: String(v), label: `${v} semanas` }))} />
+                    options={[2, 4, 6, 8, 12, 16].map(v => ({ value: String(v), label: `${v} semanas` }))} />
                   <FilterCheckbox label="Incluir sin stock/venta" checked={rIncluirSinStockSinVenta} onChange={v => { setRIncluirSinStockSinVenta(v); setRepoAvisoFiltros("Parámetros cambiados. Presione Actualizar sugerido para recalcular.") }} />
                   <Button size="sm" onClick={async () => { await loadReposicion(true) }}>Actualizar sugerido</Button>
                 </div>

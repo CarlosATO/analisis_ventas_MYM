@@ -53,45 +53,57 @@ export function getWeeklyExportUrl(analysisId: string, year: number, week: numbe
 }
 
 export async function getHallazgos(analysisId: string, opts?: {
-  period?: string; exclude_commercial?: boolean; categoria?: string; marca?: string
+  start_date?: string; end_date?: string; exclude_commercial?: boolean; categoria?: string; marca?: string
 }): Promise<HallazgosResponse> {
-  const params = { period: opts?.period, exclude_commercial: opts?.exclude_commercial, categoria: opts?.categoria, marca: opts?.marca }
+  const params = { start_date: opts?.start_date, end_date: opts?.end_date, exclude_commercial: opts?.exclude_commercial, categoria: opts?.categoria, marca: opts?.marca }
   const res = await fetch(`${API}/api/${analysisId}/hallazgos${qs(params)}`)
   return _handleResponse(res, "getHallazgos")
 }
 
-export function getHallazgosExportUrl(analysisId: string, tipo: string): string {
-  return `${API}/api/${analysisId}/export/hallazgos/${tipo}`
+export function getHallazgosExportUrl(analysisId: string, tipo: string, startDate?: string, endDate?: string): string {
+  const params = new URLSearchParams()
+  if (startDate) params.append("start_date", startDate)
+  if (endDate) params.append("end_date", endDate)
+  const qs = params.toString() ? "?" + params.toString() : ""
+  return `${API}/api/${analysisId}/export/hallazgos/${tipo}${qs}`
 }
 
 export async function getPareto(analysisId: string, opts?: {
-  period?: string; exclude_commercial?: boolean
+  start_date?: string; end_date?: string; exclude_commercial?: boolean
 }): Promise<ParetoResponse> {
-  const params = { period: opts?.period, exclude_commercial: opts?.exclude_commercial }
+  const params = { start_date: opts?.start_date, end_date: opts?.end_date, exclude_commercial: opts?.exclude_commercial }
   const res = await fetch(`${API}/api/${analysisId}/pareto${qs(params)}`)
   return _handleResponse(res, "getPareto")
 }
 
-export function getParetoExportUrl(analysisId: string): string {
-  return `${API}/api/${analysisId}/export/pareto`
+export function getParetoExportUrl(analysisId: string, startDate?: string, endDate?: string): string {
+  const params = new URLSearchParams()
+  if (startDate) params.append("start_date", startDate)
+  if (endDate) params.append("end_date", endDate)
+  const qs = params.toString() ? "?" + params.toString() : ""
+  return `${API}/api/${analysisId}/export/pareto${qs}`
 }
 
 export async function getStockSinVentas(analysisId: string, opts?: {
-  period?: string; exclude_commercial?: boolean; categoria?: string; marca?: string; stock_min?: number
+  start_date?: string; end_date?: string; exclude_commercial?: boolean; categoria?: string; marca?: string; stock_min?: number
 }): Promise<StockSinVentasResponse> {
-  const params = { period: opts?.period, exclude_commercial: opts?.exclude_commercial, categoria: opts?.categoria, marca: opts?.marca, stock_min: opts?.stock_min }
+  const params = { start_date: opts?.start_date, end_date: opts?.end_date, exclude_commercial: opts?.exclude_commercial, categoria: opts?.categoria, marca: opts?.marca, stock_min: opts?.stock_min }
   const res = await fetch(`${API}/api/${analysisId}/stock-sin-ventas${qs(params)}`)
   return _handleResponse(res, "getStockSinVentas")
 }
 
-export function getStockSinVentasExportUrl(analysisId: string): string {
-  return `${API}/api/${analysisId}/export/stock-sin-ventas`
+export function getStockSinVentasExportUrl(analysisId: string, startDate?: string, endDate?: string): string {
+  const params = new URLSearchParams()
+  if (startDate) params.append("start_date", startDate)
+  if (endDate) params.append("end_date", endDate)
+  const qs = params.toString() ? "?" + params.toString() : ""
+  return `${API}/api/${analysisId}/export/stock-sin-ventas${qs}`
 }
 
 export async function getDemandaSinStock(analysisId: string, opts?: {
-  period?: string; exclude_commercial?: boolean; venta_min?: number; dias_min?: number
+  start_date?: string; end_date?: string; exclude_commercial?: boolean; venta_min?: number; dias_min?: number
 }): Promise<DemandaSinStockResponse> {
-  const params = { period: opts?.period, exclude_commercial: opts?.exclude_commercial, venta_min: opts?.venta_min, dias_min: opts?.dias_min }
+  const params = { start_date: opts?.start_date, end_date: opts?.end_date, exclude_commercial: opts?.exclude_commercial, venta_min: opts?.venta_min, dias_min: opts?.dias_min }
   const res = await fetch(`${API}/api/${analysisId}/demanda-sin-stock${qs(params)}`)
   return _handleResponse(res, "getDemandaSinStock")
 }
@@ -101,32 +113,44 @@ export async function getDemandaHistory(analysisId: string, sku: string): Promis
   return _handleResponse(res, "getDemandaHistory")
 }
 
-export function getDemandaExportUrl(analysisId: string): string {
-  return `${API}/api/${analysisId}/export/demanda-sin-stock`
+export function getDemandaExportUrl(analysisId: string, startDate?: string, endDate?: string): string {
+  const params = new URLSearchParams()
+  if (startDate) params.append("start_date", startDate)
+  if (endDate) params.append("end_date", endDate)
+  const qs = params.toString() ? "?" + params.toString() : ""
+  return `${API}/api/${analysisId}/export/demanda-sin-stock${qs}`
 }
 
 export async function getQuiebres(analysisId: string, opts?: {
-  period?: string; exclude_commercial?: boolean
+  start_date?: string; end_date?: string; exclude_commercial?: boolean
 }): Promise<QuiebresResponse> {
-  const params = { period: opts?.period, exclude_commercial: opts?.exclude_commercial }
+  const params = { start_date: opts?.start_date, end_date: opts?.end_date, exclude_commercial: opts?.exclude_commercial }
   const res = await fetch(`${API}/api/${analysisId}/quiebres${qs(params)}`)
   return _handleResponse(res, "getQuiebres")
 }
 
-export function getQuiebresExportUrl(analysisId: string): string {
-  return `${API}/api/${analysisId}/export/quiebres`
+export function getQuiebresExportUrl(analysisId: string, startDate?: string, endDate?: string): string {
+  const params = new URLSearchParams()
+  if (startDate) params.append("start_date", startDate)
+  if (endDate) params.append("end_date", endDate)
+  const qs = params.toString() ? "?" + params.toString() : ""
+  return `${API}/api/${analysisId}/export/quiebres${qs}`
 }
 
 export async function getCaidasCrecimiento(analysisId: string, opts?: {
-  period?: string; exclude_commercial?: boolean; umbral_pct?: number
+  start_date?: string; end_date?: string; exclude_commercial?: boolean; umbral_pct?: number
 }): Promise<CaidasCrecimientoResponse> {
-  const params = { period: opts?.period, exclude_commercial: opts?.exclude_commercial, umbral_pct: opts?.umbral_pct }
+  const params = { start_date: opts?.start_date, end_date: opts?.end_date, exclude_commercial: opts?.exclude_commercial, umbral_pct: opts?.umbral_pct }
   const res = await fetch(`${API}/api/${analysisId}/caidas-crecimiento${qs(params)}`)
   return _handleResponse(res, "getCaidasCrecimiento")
 }
 
-export function getCaidasCrecimientoExportUrl(analysisId: string, tipo: string): string {
-  return `${API}/api/${analysisId}/export/caidas-crecimiento/${tipo}`
+export function getCaidasCrecimientoExportUrl(analysisId: string, tipo: string, startDate?: string, endDate?: string): string {
+  const params = new URLSearchParams()
+  if (startDate) params.append("start_date", startDate)
+  if (endDate) params.append("end_date", endDate)
+  const qs = params.toString() ? "?" + params.toString() : ""
+  return `${API}/api/${analysisId}/export/caidas-crecimiento/${tipo}${qs}`
 }
 
 export async function getReposicionFiltros(analysisId: string, opts?: {

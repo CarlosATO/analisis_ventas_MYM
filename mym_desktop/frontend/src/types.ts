@@ -70,7 +70,8 @@ export interface ProductRow {
 }
 
 export interface FiltrosActivos {
-  periodo?: string
+  start_date?: string
+  end_date?: string
   excluir_conceptos_comerciales?: boolean
   proveedor?: string
   categoria?: string

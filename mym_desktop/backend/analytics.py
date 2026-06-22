@@ -438,10 +438,12 @@ def calculo_reposicion(
     stock_min: float = 0, exclude_commercial: bool = True,
     incluir_sin_stock_sin_venta: bool = False
 ) -> dict:
-    if dias_analisis not in (28, 56, 84, 112, 182, 365):
-        dias_analisis = 28
+    VALID_DIAS = (7, 14, 21, 28, 35, 42, 49, 56, 84, 112, 182, 365)
+    if dias_analisis not in VALID_DIAS:
+        # Round to nearest valid value
+        dias_analisis = min(VALID_DIAS, key=lambda x: abs(x - dias_analisis))
     if cobertura_objetivo not in (2, 4, 6, 8, 12, 16):
-        cobertura_objetivo = 4
+        cobertura_objetivo = 2
 
     if exclude_commercial:
         sales = filter_commercial(sales)
