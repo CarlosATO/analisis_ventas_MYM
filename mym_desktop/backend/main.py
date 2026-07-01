@@ -864,6 +864,7 @@ def get_reposicion(
             "ranking": i,
             "sku": str(r.get("SKU", "")),
             "producto": str(r.get("Producto", "")),
+            "variante": str(r.get("Variante", "-")),
             "proveedor": str(r.get("Proveedor", "")),
             "marca": str(r.get("Marca", "")),
             "categoria": str(r.get("Categoría", "")),

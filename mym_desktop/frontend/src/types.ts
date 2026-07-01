@@ -177,6 +177,7 @@ export interface ReposicionProducto {
   ranking: number
   sku: string
   producto: string
+  variante: string
   proveedor: string
   marca: string
   categoria: string

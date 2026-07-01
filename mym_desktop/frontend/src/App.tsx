@@ -1079,7 +1079,7 @@ export default function App() {
                     <Table className="repo-table border-0 rounded-none">
                       <THead>
                         <TR>
-                          <TH className={repoBlockHeader} colSpan={3}>Producto</TH>
+                          <TH className={repoBlockHeader} colSpan={4}>Producto</TH>
                           <TH className={repoBlockHeader} colSpan={1}>Stock</TH>
                           <TH className={repoBlockHeader} colSpan={reposicion.semanas_cols.length}>UNIDADES VENDIDAS CADA 7 DÍAS</TH>
                           <TH className={repoBlockHeader} colSpan={4}>Confirmación de compra</TH>
@@ -1087,8 +1087,9 @@ export default function App() {
                           <TH className={repoBlockHeader} colSpan={2}>Gestión</TH>
                         </TR>
                         <TR>
-                          <TH onClick={() => toggleRepoSort("codigo")} className={repoTh("codigo", "repo-sticky-th sticky left-0 z-30 cursor-pointer select-none")}>Código<span className="sort-arrow">{repoSortArrow("codigo")}</span></TH>
-                          <TH onClick={() => toggleRepoSort("producto")} className={repoTh("descripcion", "repo-sticky-th repo-sticky-edge sticky left-[90px] z-30 min-w-[240px] cursor-pointer select-none")}>Descripción<span className="sort-arrow">{repoSortArrow("producto")}</span></TH>
+                          <TH onClick={() => toggleRepoSort("codigo")} className={repoTh("codigo", "repo-sticky-th sticky left-0 z-30 w-[90px] min-w-[90px] max-w-[90px] cursor-pointer select-none")}>Código<span className="sort-arrow">{repoSortArrow("codigo")}</span></TH>
+                          <TH onClick={() => toggleRepoSort("producto")} className={repoTh("descripcion", "repo-sticky-th sticky left-[90px] z-30 w-[260px] min-w-[260px] max-w-[260px] cursor-pointer select-none")}>Descripción<span className="sort-arrow">{repoSortArrow("producto")}</span></TH>
+                          <TH onClick={() => toggleRepoSort("variante")} className={repoTh("variante", "repo-sticky-th repo-sticky-edge sticky left-[350px] z-30 w-[140px] min-w-[140px] max-w-[140px] cursor-pointer select-none")}>Variante<span className="sort-arrow">{repoSortArrow("variante")}</span></TH>
                           <TH onClick={() => toggleRepoSort("proveedor")} className={repoTh("proveedor", "cursor-pointer select-none")}>Proveedor<span className="sort-arrow">{repoSortArrow("proveedor")}</span></TH>
                           <TH onClick={() => toggleRepoSort("stock_actual")} className={repoTh("stock", "text-right bg-slate-500/5 cursor-pointer select-none")}>Stock actual<span className="sort-arrow">{repoSortArrow("stock_actual")}</span></TH>
                           {reposicion.semanas_cols.map(col => <TH key={col} onClick={() => toggleRepoSort(col)} className={repoTh(col, "text-right bg-cyan-500/5 cursor-pointer select-none")}>{col.replace("Venta por semana ", "")}<span className="sort-arrow">{repoSortArrow(col)}</span></TH>)}
@@ -1109,8 +1110,9 @@ export default function App() {
                       <TBody>
                         {repoProductosVisibles.map(p => (
                           <TR key={p.sku} onClick={() => setRepoFilaActiva(p.sku)} onDoubleClick={() => { setRepoFilaActiva(p.sku); setRepoDrawerSku(p.sku) }} className={repoFilaActiva === p.sku ? "repo-row-active" : repoConfirmaciones[p.sku]?.confirmado ? "repo-row-confirmed" : ""}>
-                            <TD className={repoTd("codigo", "repo-sticky sticky left-0 z-10 font-semibold w-[90px]")}>{p.sku}</TD>
-                            <TD className={repoTd("descripcion", "repo-sticky repo-sticky-edge sticky left-[90px] z-10 min-w-[240px] max-w-[320px] truncate")}>{p.producto}</TD>
+                            <TD className={repoTd("codigo", "repo-sticky sticky left-0 z-10 font-semibold w-[90px] min-w-[90px] max-w-[90px]")}>{p.sku}</TD>
+                            <TD className={repoTd("descripcion", "repo-sticky sticky left-[90px] z-10 w-[260px] min-w-[260px] max-w-[260px] truncate")}>{p.producto}</TD>
+                            <TD className={repoTd("variante", "repo-sticky repo-sticky-edge sticky left-[350px] z-10 w-[140px] min-w-[140px] max-w-[140px] truncate")} title={p.variante}>{p.variante}</TD>
                             <TD className={repoTd("proveedor")}>{p.proveedor}</TD>
                             <TD className={repoTd("stock", "text-right")}>{p.stock_actual.toLocaleString("es-CL")}</TD>
                             {reposicion.semanas_cols.map(col => <TD key={`${p.sku}-${col}`} className={repoTd(col, "repo-week text-right")}>{(p.semanas_data[col] ?? 0).toLocaleString("es-CL")}</TD>)}

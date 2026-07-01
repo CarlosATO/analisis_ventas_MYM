@@ -528,7 +528,7 @@ def calculo_reposicion(
     supplier_stock_col = detect_supplier_column(stock)
     supplier_sales_col = detect_supplier_column(sales)
     proveedor_disponible = supplier_stock_col is not None or supplier_sales_col is not None
-    stock_cols = ["SKU", "Producto", "Marca", "Tipo de Producto", "Cantidad Disponible", "Costo Neto Prom. Unitario"]
+    stock_cols = ["SKU", "Producto", "Variante", "Marca", "Tipo de Producto", "Cantidad Disponible", "Costo Neto Prom. Unitario"]
     if supplier_stock_col is not None:
         stock_cols.append(supplier_stock_col)
     existing_stock_cols = [c for c in stock_cols if c in stock.columns]
@@ -554,6 +554,10 @@ def calculo_reposicion(
         df["Producto"] = df["SKU"]
     if "Costo Neto Prom. Unitario" not in df.columns:
         df["Costo Neto Prom. Unitario"] = 0
+
+    if "Variante" not in df.columns:
+        df["Variante"] = "-"
+    df["Variante"] = df["Variante"].fillna("-")
 
     df["Proveedor"] = df["Proveedor"].fillna("Sin Proveedor")
     df["Marca"] = df["Marca"].fillna("Sin Marca")
