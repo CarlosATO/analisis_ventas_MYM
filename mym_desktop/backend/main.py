@@ -906,6 +906,7 @@ def _reposicion_payload_df(payload: dict) -> tuple[pd.DataFrame, dict, dict]:
         rows.append({
             "Código": str(p.get("sku", "")),
             "Descripción": str(p.get("producto", "")),
+            "Variante": str(p.get("variante", "-")),
             "Proveedor": str(p.get("proveedor", "")),
             "Stock actual": int(p.get("stock_actual", 0) or 0),
             **{str(k): int(v or 0) for k, v in (p.get("semanas_data", {}) or {}).items()},
@@ -1070,8 +1071,8 @@ def _reposicion_pdf_report(df: pd.DataFrame, filtros: dict, resumen: dict) -> by
     pdf.set_y(box_y + 33)
 
     # ── Table ─────────────────────────────────────────
-    cols = ["#", "Codigo", "Descripcion", "Cant.", "Precio Unit.", "Monto Total"]
-    col_w = [8, 22, 82, 20, 26, 28]
+    cols = ["#", "Codigo", "Descripcion", "Variante", "Cant.", "Precio Unit.", "Monto Total"]
+    col_w = [8, 20, 62, 26, 18, 24, 28]
     fill_header = (30, 58, 95)
     fill_alt = (245, 247, 250)
 
@@ -1105,7 +1106,8 @@ def _reposicion_pdf_report(df: pd.DataFrame, filtros: dict, resumen: dict) -> by
             pdf.set_fill_color(255, 255, 255)
 
         cod = str(r.get("Código", ""))[:10]
-        desc = str(r.get("Descripción", ""))[:42]
+        desc = str(r.get("Descripción", ""))[:32]
+        var = str(r.get("Variante", "-"))[:15]
         cant = f"{int(r.get('Cantidad confirmada', 0) or 0):,}".replace(",", ".")
         costo = _fmt_money(float(r.get("Costo unitario estimado", 0) or 0))
         monto = _fmt_money(float(r.get("Monto confirmado", 0) or 0))
@@ -1114,21 +1116,22 @@ def _reposicion_pdf_report(df: pd.DataFrame, filtros: dict, resumen: dict) -> by
         pdf.cell(col_w[0], 6, str(idx + 1), border=1, fill=True, align="C")
         pdf.cell(col_w[1], 6, cod, border=1, fill=True)
         pdf.cell(col_w[2], 6, desc, border=1, fill=True)
-        pdf.cell(col_w[3], 6, cant, border=1, fill=True, align="R")
-        pdf.cell(col_w[4], 6, costo, border=1, fill=True, align="R")
-        pdf.cell(col_w[5], 6, monto, border=1, fill=True, align="R")
+        pdf.cell(col_w[3], 6, var, border=1, fill=True)
+        pdf.cell(col_w[4], 6, cant, border=1, fill=True, align="R")
+        pdf.cell(col_w[5], 6, costo, border=1, fill=True, align="R")
+        pdf.cell(col_w[6], 6, monto, border=1, fill=True, align="R")
         pdf.ln()
 
     # ── Totals ────────────────────────────────────────
     pdf.ln(2)
-    col_total_w = col_w[0] + col_w[1] + col_w[2] + col_w[3]
+    col_total_w = col_w[0] + col_w[1] + col_w[2] + col_w[3] + col_w[4]
     pdf.set_draw_color(30, 58, 95)
     pdf.set_font("Helvetica", "B", 9)
     pdf.set_fill_color(30, 58, 95)
     pdf.set_text_color(255, 255, 255)
     pdf.cell(col_total_w, 7, "TOTAL NETO", border=1, fill=True, align="R")
-    pdf.cell(col_w[4], 7, "", border=1, fill=True, align="R")
-    pdf.cell(col_w[5], 7, _fmt_money(total_neto), border=1, fill=True, align="R")
+    pdf.cell(col_w[5], 7, "", border=1, fill=True, align="R")
+    pdf.cell(col_w[6], 7, _fmt_money(total_neto), border=1, fill=True, align="R")
     pdf.ln(10)
 
     # ── Summary line ──────────────────────────────────
