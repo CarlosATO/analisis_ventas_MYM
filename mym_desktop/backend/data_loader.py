@@ -32,11 +32,12 @@ def _find_column(df: pd.DataFrame, aliases: set[str]) -> str | None:
     return None
 
 def _match_col(df: pd.DataFrame, *names: str) -> str | None:
-    """Devuelve la primera columna del DataFrame que normalizada coincida con algún name dado."""
-    targets = {_norm(n) for n in names}
-    for col in df.columns:
-        if _norm(col) in targets:
-            return col
+    """Devuelve la primera columna del DataFrame que normalizada coincida con algún name dado respetando la prioridad de los alias."""
+    for name in names:
+        target = _norm(name)
+        for col in df.columns:
+            if _norm(col) == target:
+                return col
     return None
 
 def _drop_duplicate_columns(df: pd.DataFrame, file_type: str) -> pd.DataFrame:

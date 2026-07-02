@@ -908,13 +908,14 @@ def _reposicion_payload_df(payload: dict) -> tuple[pd.DataFrame, dict, dict]:
             "Descripción": str(p.get("producto", "")),
             "Variante": str(p.get("variante", "-")),
             "Proveedor": str(p.get("proveedor", "")),
-            "Stock actual": int(p.get("stock_actual", 0) or 0),
+            "Stock Disponible": int(p.get("stock_actual", 0) or 0),
             **{str(k): int(v or 0) for k, v in (p.get("semanas_data", {}) or {}).items()},
+            "Ventas del período": int(p.get("total_unidades_vendidas", 0) or 0),
             "Promedio semanal": float(p.get("promedio_semanal", 0) or 0),
+            "Stock objetivo": int(p.get("stock_objetivo", 0) or 0),
             "Cobertura actual": p.get("cobertura_actual", ""),
             "Variación reciente": p.get("tendencia_pct", ""),
             "Estado tendencia": str(p.get("estado_tendencia", "")),
-            "Stock objetivo": int(p.get("stock_objetivo", 0) or 0),
             "Compra sugerida": int(p.get("compra_sugerida", 0) or 0),
             "Cantidad confirmada": cantidad,
             "Costo unitario estimado": costo,
@@ -974,7 +975,7 @@ def _reposicion_excel_report(df: pd.DataFrame, filtros: dict, resumen: dict) -> 
             except Exception:
                 max_len = len(str(col_name))
             width = min(max(max_len + 2, 12), 38)
-            fmt = money_fmt if col_name in ("Costo unitario estimado", "Monto confirmado") else int_fmt if col_name in ("Stock actual", "Stock objetivo", "Compra sugerida", "Cantidad confirmada") or (" a " in str(col_name)) else num_fmt if col_name in ("Promedio semanal", "Cobertura actual") else None
+            fmt = money_fmt if col_name in ("Costo unitario estimado", "Monto confirmado") else int_fmt if col_name in ("Stock Disponible", "Ventas del período", "Stock objetivo", "Compra sugerida", "Cantidad confirmada") or (" a " in str(col_name)) else num_fmt if col_name in ("Promedio semanal", "Cobertura actual") else None
             ws.set_column(col_num, col_num, width, fmt)
         ws.autofilter(start_row, 0, start_row, max(len(df.columns) - 1, 0))
         ws.freeze_panes(start_row + 1, 2)
@@ -1032,15 +1033,22 @@ def _reposicion_pdf_report(df: pd.DataFrame, filtros: dict, resumen: dict) -> by
     pdf.set_xy(20, box_y + 3)
     pdf.set_font("Helvetica", "B", 8)
     pdf.set_text_color(71, 85, 105)
-    pdf.cell(18, 5, "PROVEEDOR:")
+    pdf.cell(24, 5, "PROVEEDOR:")
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(15, 23, 42)
+    
     proveedor_txt = str(filtros.get("proveedor", "Todos"))
+    if not proveedor_txt or proveedor_txt.lower() == "todos":
+        if "Proveedor" in df.columns and not df.empty:
+            provs = df["Proveedor"].dropna().unique()
+            if len(provs) > 0:
+                proveedor_txt = str(provs[0])
+                
     pdf.cell(70, 5, proveedor_txt[:40])
     pdf.set_xy(125, box_y + 3)
     pdf.set_font("Helvetica", "B", 8)
     pdf.set_text_color(71, 85, 105)
-    pdf.cell(24, 5, "COBERTURA OBJ.:")
+    pdf.cell(34, 5, "COBERTURA OBJ.:")
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(15, 23, 42)
     pdf.cell(22, 5, str(filtros.get("cobertura_objetivo", "")) + " sem.")
@@ -1166,12 +1174,12 @@ def export_reposicion_excel(
     cols_to_export = [
         "SKU", "Producto", "Proveedor", "Cantidad Disponible",
         *rep["semanas_cols"], "total_unidades_vendidas", "promedio_semanal",
-        "cobertura_actual", "stock_objetivo", "compra_sugerida", "tendencia_pct",
-        "estado_tendencia", "estado_stock", "accion_sugerida", "Costo Neto Prom. Unitario", "monto_estimado_compra"
+        "stock_objetivo", "cobertura_actual", "tendencia_pct",
+        "estado_tendencia", "compra_sugerida", "estado_stock", "accion_sugerida", "Costo Neto Prom. Unitario", "monto_estimado_compra"
     ]
     df_export = df[[c for c in cols_to_export if c in df.columns]].rename(columns={
-        "Cantidad Disponible": "Stock actual",
-        "total_unidades_vendidas": "Total unidades vendidas",
+        "Cantidad Disponible": "Stock Disponible",
+        "total_unidades_vendidas": "Ventas del período",
         "promedio_semanal": "Promedio semanal",
         "cobertura_actual": "Cobertura actual",
         "stock_objetivo": "Stock objetivo",
@@ -1210,7 +1218,7 @@ def export_reposicion_confirmados_excel(analysis_id: str, productos: list[dict] 
             "Código": str(p.get("sku", "")),
             "Descripción": str(p.get("producto", "")),
             "Proveedor": str(p.get("proveedor", "")),
-            "Stock actual": int(p.get("stock_actual", 0) or 0),
+            "Stock Disponible": int(p.get("stock_actual", 0) or 0),
             "Promedio semanal": float(p.get("promedio_semanal", 0) or 0),
             "Cobertura actual": p.get("cobertura_actual", ""),
             "Stock objetivo": int(p.get("stock_objetivo", 0) or 0),

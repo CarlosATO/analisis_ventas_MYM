@@ -607,10 +607,15 @@ export default function App() {
           ))}
         </nav>
 
-        <div className="border-t px-3 py-3" style={{ borderColor: "var(--border)" }}>
+        <div className="border-t px-3 py-3 flex flex-col gap-2" style={{ borderColor: "var(--border)" }}>
           <button onClick={toggleTheme} className="w-full text-sm font-semibold px-3 py-2 rounded-lg border cursor-pointer transition-colors" style={{ borderColor: "var(--border)", color: "var(--foreground)", backgroundColor: "var(--surface-soft)" }}>
             {sidebarOpen ? (theme === "light" ? "🌙 Oscuro" : "☀️ Claro") : theme === "light" ? "🌙" : "☀️"}
           </button>
+          {sidebarOpen && (
+            <div className="text-center text-[10px] font-semibold tracking-widest mt-1 opacity-50" style={{ color: "var(--muted)" }}>
+              V0.1.0
+            </div>
+          )}
         </div>
       </aside>
 
@@ -1091,18 +1096,18 @@ export default function App() {
                           <TH onClick={() => toggleRepoSort("producto")} className={repoTh("descripcion", "repo-sticky-th sticky left-[90px] z-30 w-[260px] min-w-[260px] max-w-[260px] cursor-pointer select-none")}>Descripción<span className="sort-arrow">{repoSortArrow("producto")}</span></TH>
                           <TH onClick={() => toggleRepoSort("variante")} className={repoTh("variante", "repo-sticky-th repo-sticky-edge sticky left-[350px] z-30 w-[140px] min-w-[140px] max-w-[140px] cursor-pointer select-none")}>Variante<span className="sort-arrow">{repoSortArrow("variante")}</span></TH>
                           <TH onClick={() => toggleRepoSort("proveedor")} className={repoTh("proveedor", "cursor-pointer select-none")}>Proveedor<span className="sort-arrow">{repoSortArrow("proveedor")}</span></TH>
-                          <TH onClick={() => toggleRepoSort("stock_actual")} className={repoTh("stock", "text-right bg-slate-500/5 cursor-pointer select-none")}>Stock actual<span className="sort-arrow">{repoSortArrow("stock_actual")}</span></TH>
+                          <TH onClick={() => toggleRepoSort("stock_actual")} className={repoTh("stock", "text-right bg-slate-500/5 cursor-pointer select-none")}>Stock Disponible<span className="sort-arrow">{repoSortArrow("stock_actual")}</span></TH>
                           {reposicion.semanas_cols.map(col => <TH key={col} onClick={() => toggleRepoSort(col)} className={repoTh(col, "text-right bg-cyan-500/5 cursor-pointer select-none")}>{col.replace("Venta por semana ", "")}<span className="sort-arrow">{repoSortArrow(col)}</span></TH>)}
-                          <TH onClick={() => toggleRepoSort("compra_sugerida")} className={repoTh("sugerida", "text-right bg-emerald-500/5 cursor-pointer select-none")}><span title="Diferencia entre el stock objetivo y el stock actual. Si el stock actual ya cubre el objetivo, la compra sugerida será 0.">Compra sugerida</span><span className="sort-arrow">{repoSortArrow("compra_sugerida")}</span></TH>
+                          <TH onClick={() => toggleRepoSort("compra_sugerida")} className={repoTh("sugerida", "text-right bg-emerald-500/5 cursor-pointer select-none")}><span title="Diferencia entre el stock objetivo y el stock disponible. Si el stock disponible ya cubre el objetivo, la compra sugerida será 0.">Compra sugerida</span><span className="sort-arrow">{repoSortArrow("compra_sugerida")}</span></TH>
                           <TH onClick={() => toggleRepoSort("cantidad")} className={repoTh("cantidad", "text-right bg-emerald-500/5 cursor-pointer select-none")}>Cantidad confirmada<span className="sort-arrow">{repoSortArrow("cantidad")}</span></TH>
                           <TH onClick={() => toggleRepoSort("monto")} className={repoTh("monto", "text-right bg-emerald-500/5 cursor-pointer select-none")}>Monto confirmado<span className="sort-arrow">{repoSortArrow("monto")}</span></TH>
                           <TH onClick={() => toggleRepoSort("confirmar")} className={repoTh("confirmar", "text-right bg-emerald-500/5 cursor-pointer select-none")}>Confirmar<span className="sort-arrow">{repoSortArrow("confirmar")}</span></TH>
-                          <TH onClick={() => toggleRepoSort("total_unidades_vendidas")} className={repoTh("total", "text-right bg-indigo-500/5 cursor-pointer select-none")}>Total unidades<span className="sort-arrow">{repoSortArrow("total_unidades_vendidas")}</span></TH>
+                          <TH onClick={() => toggleRepoSort("total_unidades_vendidas")} className={repoTh("total", "text-right bg-indigo-500/5 cursor-pointer select-none")}>Ventas del período<span className="sort-arrow">{repoSortArrow("total_unidades_vendidas")}</span></TH>
                           <TH onClick={() => toggleRepoSort("promedio_semanal")} className={repoTh("promedio", "text-right bg-indigo-500/5 cursor-pointer select-none")}>Prom. semanal<span className="sort-arrow">{repoSortArrow("promedio_semanal")}</span></TH>
-                          <TH onClick={() => toggleRepoSort("cobertura_actual")} className={repoTh("cobertura", "text-right bg-indigo-500/5 cursor-pointer select-none")}>Cobertura<span className="sort-arrow">{repoSortArrow("cobertura_actual")}</span></TH>
+                          <TH onClick={() => toggleRepoSort("stock_objetivo")} className={repoTh("objetivo", "text-right bg-indigo-500/5 cursor-pointer select-none")}><span title="Cantidad ideal de stock para cubrir la cobertura objetivo seleccionada.">Stock objetivo</span><span className="sort-arrow">{repoSortArrow("stock_objetivo")}</span></TH>
+                          <TH onClick={() => toggleRepoSort("cobertura_actual")} className={repoTh("cobertura", "text-right bg-indigo-500/5 cursor-pointer select-none")}><span title="Semanas estimadas que durará el stock disponible basándose en el promedio semanal de ventas.">Cobertura</span><span className="sort-arrow">{repoSortArrow("cobertura_actual")}</span></TH>
                           <TH onClick={() => toggleRepoSort("tendencia_pct")} className={repoTh("variacion", "text-right bg-indigo-500/5 cursor-pointer select-none")}><span title="Compara el promedio de unidades vendidas en las semanas más recientes contra el promedio del período inmediatamente anterior. Sirve para detectar si el producto está acelerando, estable o cayendo.">Variación reciente</span><span className="sort-arrow">{repoSortArrow("tendencia_pct")}</span></TH>
                           <TH onClick={() => toggleRepoSort("estado_tendencia")} className={repoTh("estado_tendencia", "text-right bg-indigo-500/5 cursor-pointer select-none")}>Estado tendencia<span className="sort-arrow">{repoSortArrow("estado_tendencia")}</span></TH>
-                          <TH onClick={() => toggleRepoSort("stock_objetivo")} className={repoTh("objetivo", "text-right bg-indigo-500/5 cursor-pointer select-none")}><span title="Cantidad ideal de stock para cubrir la cobertura objetivo seleccionada.">Stock objetivo</span><span className="sort-arrow">{repoSortArrow("stock_objetivo")}</span></TH>
                           <TH onClick={() => toggleRepoSort("estado_stock")} className={repoTh("estado_stock", "text-right cursor-pointer select-none")}>Estado stock<span className="sort-arrow">{repoSortArrow("estado_stock")}</span></TH>
                           <TH onClick={() => toggleRepoSort("accion_sugerida")} className={repoTh("accion", "cursor-pointer select-none")}>Acción sugerida<span className="sort-arrow">{repoSortArrow("accion_sugerida")}</span></TH>
                         </TR>
@@ -1122,10 +1127,10 @@ export default function App() {
                             <TD className={repoTd("confirmar", "repo-confirm text-right")}><input type="checkbox" checked={repoConfirmaciones[p.sku]?.confirmado ?? false} onChange={e => setRepoConfirmado(p.sku, e.target.checked)} /></TD>
                             <TD className={repoTd("total", "repo-calc text-right")}>{p.total_unidades_vendidas.toLocaleString("es-CL")}</TD>
                             <TD className={repoTd("promedio", "repo-calc text-right")}>{p.promedio_semanal.toFixed(2)}</TD>
+                            <TD className={repoTd("objetivo", "repo-calc text-right")}>{p.stock_objetivo.toLocaleString("es-CL")}</TD>
                             <TD className={repoTd("cobertura", "repo-calc text-right")}>{p.cobertura_actual != null ? `${p.cobertura_actual.toFixed(1)} sem.` : "Sin movimiento"}</TD>
                             <TD className={repoTd("variacion", "repo-calc text-right")}>{fmtPct(p.tendencia_pct)}</TD>
                             <TD className={repoTd("estado_tendencia", "repo-calc text-right")}><span className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: p.estado_tendencia === "Creciendo" ? "#22c55e30" : p.estado_tendencia === "Cayendo" ? "#ef444430" : p.estado_tendencia === "Estable" ? "#64748b30" : "#94a3b830", color: p.estado_tendencia === "Creciendo" ? "#166534" : p.estado_tendencia === "Cayendo" ? "#991b1b" : "#334155" }}>{p.estado_tendencia}</span></TD>
-                            <TD className={repoTd("objetivo", "repo-calc text-right")}>{p.stock_objetivo.toLocaleString("es-CL")}</TD>
                             <TD className={repoTd("estado_stock", "text-right")}><span className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: p.estado_stock === "Crítico" ? "#ef444430" : p.estado_stock === "Reponer" ? "#f59e0b30" : p.estado_stock === "Completar objetivo" ? "#2563eb30" : p.estado_stock === "Stock sano" ? "#22c55e30" : "#64748b30", color: p.estado_stock === "Crítico" ? "#ef4444" : p.estado_stock === "Reponer" ? "#f59e0b" : p.estado_stock === "Completar objetivo" ? "#2563eb" : p.estado_stock === "Stock sano" ? "#22c55e" : "var(--muted)" }}>{p.estado_stock}</span></TD>
                             <TD className={repoTd("accion", "min-w-[220px]")}>{p.accion_sugerida}</TD>
                           </TR>
@@ -1161,13 +1166,13 @@ export default function App() {
                           </div>
                           <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
                             {[
-                              ["Stock actual", repoProductoDrawer.stock_actual.toLocaleString("es-CL")],
-                              ["Total unidades vendidas", repoProductoDrawer.total_unidades_vendidas.toLocaleString("es-CL")],
+                              ["Stock Disponible", repoProductoDrawer.stock_actual.toLocaleString("es-CL")],
+                              ["Ventas del período", repoProductoDrawer.total_unidades_vendidas.toLocaleString("es-CL")],
                               ["Promedio semanal", repoProductoDrawer.promedio_semanal.toFixed(2)],
+                              ["Stock objetivo", repoProductoDrawer.stock_objetivo.toLocaleString("es-CL")],
                               ["Cobertura actual", repoProductoDrawer.cobertura_actual != null ? `${repoProductoDrawer.cobertura_actual.toFixed(1)} sem.` : "Sin movimiento"],
                               ["Variación reciente", fmtPct(repoProductoDrawer.tendencia_pct)],
                               ["Estado tendencia", repoProductoDrawer.estado_tendencia],
-                              ["Stock objetivo", repoProductoDrawer.stock_objetivo.toLocaleString("es-CL")],
                               ["Compra sugerida", repoProductoDrawer.compra_sugerida.toLocaleString("es-CL")],
                             ].map(([label, value]) => (
                               <div key={label} className="flex items-center justify-between border-b border-slate-200 pb-2 dark:border-slate-700">
